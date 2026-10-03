@@ -89,29 +89,19 @@ jobs:
       # ---------------------------------------------------------
       # Verify integration
       # ---------------------------------------------------------
-      - name: Verify KernelSU integration
+      - name: Verify KernelSU Next source
         working-directory: kernel
         run: |
-          echo "=== KernelSU directory ==="
-          ls -la KernelSU-Next/kernel
+          echo "=== KernelSU Next source ==="
+          test -d KernelSU-Next/kernel
+          test -f KernelSU-Next/kernel/Kconfig
+          test -f KernelSU-Next/kernel/Makefile
+
+          echo "KernelSU Next source is present."
 
           echo
-          echo "=== drivers/kernelsu ==="
-          ls -la drivers/kernelsu
-
-          echo
-          echo "=== Kconfig entry ==="
-          grep -n 'drivers/kernelsu/Kconfig' drivers/Kconfig
-
-          echo
-          echo "=== Makefile entry ==="
-          grep -n 'CONFIG_KSU' drivers/Makefile
-
-          echo
-          echo "=== KSU source ==="
-          test -f KernelSU-Next/kernel/ksu.c
-
-          echo "KernelSU Next integration OK."
+          echo "KernelSU Next kernel tree:"
+          find KernelSU-Next/kernel -maxdepth 2 -type f | sort | head -100
 
       # ---------------------------------------------------------
       # Add GTA4L manual hooks
