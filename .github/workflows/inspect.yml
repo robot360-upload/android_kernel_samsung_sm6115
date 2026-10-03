@@ -1,0 +1,132 @@
+name: Inspect KernelSU Next Manual Hooks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl
+
+      - name: Clone official LineageOS kernel
+        run: |
+          set -e
+
+          git clone \
+            --branch lineage-23.2 \
+            https://github.com/LineageOS/android_kernel_samsung_sm6115.git \
+            kernel
+
+      - name: Clone KernelSU Next
+        run: |
+          set -e
+
+          git clone \
+            --depth=1 \
+            https://github.com/KernelSU-Next/KernelSU-Next.git \
+            KernelSU-Next
+
+      - name: Show kernel versions
+        run: |
+          echo "=== LineageOS kernel ==="
+          git -C kernel log -1 --oneline
+
+          echo
+          echo "=== KernelSU Next ==="
+          git -C KernelSU-Next log -1 --oneline
+
+      - name: Inspect KernelSU hook implementation
+        run: |
+          set -e
+
+          echo "================================================"
+          echo "KernelSU Next hook references"
+          echo "================================================"
+
+          grep -R -n \
+            -E "ksu_handle_execveat|ksu_handle_faccessat|ksu_handle_sys_read|ksu_handle_stat|ksu_handle_sys_reboot" \
+            KernelSU-Next/kernel \
+            | head -100 || true
+
+      - name: Inspect fs/exec.c
+        working-directory: kernel
+        run: |
+          echo "================================================"
+          echo "fs/exec.c"
+          echo "================================================"
+
+          grep -n \
+            -B20 -A30 \
+            -E "__do_execve_file|do_execveat_common" \
+            fs/exec.c \
+            | head -120
+
+      - name: Inspect fs/open.c
+        working-directory: kernel
+        run: |
+          echo "================================================"
+          echo "fs/open.c"
+          echo "================================================"
+
+          grep -n \
+            -B20 -A30 \
+            -E "do_faccessat|do_faccessat2|faccessat" \
+            fs/open.c \
+            | head -160
+
+      - name: Inspect fs/read_write.c
+        working-directory: kernel
+        run: |
+          echo "================================================"
+          echo "fs/read_write.c"
+          echo "================================================"
+
+          grep -n \
+            -B20 -A35 \
+            -E "SYSCALL_DEFINE3\\(read|ksys_read|vfs_read" \
+            fs/read_write.c \
+            | head -180
+
+      - name: Inspect fs/stat.c
+        working-directory: kernel
+        run: |
+          echo "================================================"
+          echo "fs/stat.c"
+          echo "================================================"
+
+          grep -n \
+            -B20 -A35 \
+            -E "vfs_statx|vfs_fstatat|SYSCALL_DEFINE.*stat" \
+            fs/stat.c \
+            | head -220
+
+      - name: Inspect kernel/reboot.c
+        working-directory: kernel
+        run: |
+          echo "================================================"
+          echo "kernel/reboot.c"
+          echo "================================================"
+
+          grep -n \
+            -B25 -A40 \
+            -E "SYSCALL_DEFINE4\\(reboot|kernel_restart|do_exit" \
+            kernel/reboot.c \
+            | head -180
+
+      - name: Inspect existing KernelSU symbols
+        working-directory: kernel
+        run: |
+          echo "================================================"
+          echo "Existing KernelSU references in LineageOS tree"
+          echo "================================================"
+
+          grep -R -n \
+            -E "ksu_handle_execveat|ksu_handle_faccessat|ksu_handle_sys_read|ksu_handle_stat|ksu_handle_sys_reboot" \
+            . \
+            --exclude-dir=.git \
+            | head -100 || true
