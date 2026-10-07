@@ -1,0 +1,102 @@
+name: Integrate ReSukiSU
+
+# Manually triggered. Clones BakaSU (ReSukiSU) into KernelSU/, wires it into
+# drivers/ (symlink + Makefile + Kconfig), and commits it as NORMAL FILES —
+# explicitly NOT as a git submodule / gitlink.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: integrate-resukisu-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl git
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+users.noreply.github.com"
+
+      - name: Fail if working tree is dirty
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Working tree is not clean."
+            git status --short
+            exit 1
+          fi
+
+      - name: Run the official ReSukiSU setup script
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+
+      # --- CRITICAL: this is what prevents a gitlink -------------------------
+      # The setup script does `git clone ... KernelSU`, so KernelSU/ is a real
+      # nested git repository. If it is left in place, `git add` stages it as a
+      # gitlink (mode 160000) instead of as plain files. Removing the nested
+      # .git makes Git treat KernelSU/ as ordinary files.
+      - name: Strip the nested KernelSU git repository
+        run: |
+          if [ -d KernelSU/.git ]; then
+            echo "Removing nested KernelSU/.git ..."
+            rm -rf KernelSU/.git
+          fi
+          # Belt-and-braces: no .git anywhere under KernelSU/.
+          find KernelSU -name .git -print 2>/dev/null
+          echo "done"
+
+      - name: Verify the integration landed
+        run: |
+          set -e
+          test -d KernelSU                      || { echo "::error::KernelSU/ missing"; exit 1; }
+          test -f KernelSU/kernel/Kconfig       || { echo "::error::KernelSU/kernel/Kconfig missing"; exit 1; }
+          test -L drivers/kernelsu              || { echo "::error::drivers/kernelsu symlink missing"; exit 1; }
+          grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile \
+              || { echo "::error::drivers/Makefile not patched"; exit 1; }
+          grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig \
+              || { echo "::error::drivers/Kconfig not patched"; exit 1; }
+          echo "KernelSU source files: $(find KernelSU -type f | wc -l)"
+
+      - name: Stage changes
+        run: git add -A
+
+      # --- Guard: refuse to push if any gitlink was staged -------------------
+      - name: Assert NO gitlink (mode 160000) was staged
+        run: |
+          links=$(git ls-files --stage | awk '$1 == "160000" { print $4 }')
+          if [ -n "$links" ]; then
+            echo "::error::A gitlink (mode 160000) was staged. KernelSU must be committed as normal files."
+            echo "$links"
+            exit 1
+          fi
+          echo "OK: no gitlink staged."
+          echo "--- staged summary ---"
+          git diff --cached --stat | tail -n 5
+
+      - name: Commit
+        run: |
+          if git diff --cached --quiet; then
+            echo "::error::Setup produced no changes."
+            exit 1
+          fi
+          git commit -m "kernel: integrate ReSukiSU (BakaSU)"
+
+      - name: Push
+        run: git push origin HEAD:${{ github.ref_name }}
