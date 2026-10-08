@@ -110,35 +110,18 @@ jobs:
       - name: Check SUSFS patch
         run: |
           set -e
-
-          PATCH="patches/susfs-gta4l-lineage23.2-v2.3.0-improved.patch"
+          PATCH="patches/susfs-gta4l-lineage23.2-v3.0-fixed.patch"
 
           echo "Checking SUSFS patch against the GTA4L kernel source..."
+          git apply --check --recount --verbose "$PATCH"
 
-          git apply \
-            --check \
-            --verbose \
-            "$PATCH"
-
-          echo
-          echo "SUSFS patch check PASSED."
-
-      # ------------------------------------------------------------
-      # Apply SUSFS
-      # ------------------------------------------------------------
       - name: Apply SUSFS patch
         run: |
           set -e
+          PATCH="patches/susfs-gta4l-lineage23.2-v3.0-fixed.patch"
 
-          PATCH="patches/susfs-gta4l-lineage23.2-v2.3.0-improved.patch"
-
-          git apply \
-            --verbose \
-            "$PATCH"
-
-          echo
-          echo "SUSFS patch applied successfully."
-
+          echo "Applying SUSFS patch..."
+          git apply --recount --verbose "$PATCH"
       # ------------------------------------------------------------
       # Verify SUSFS files
       # ------------------------------------------------------------
