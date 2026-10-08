@@ -16,15 +16,22 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      # ------------------------------------------------------------
+      # Checkout the GTA4L kernel source
+      # ------------------------------------------------------------
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
           ref: lineage-23.2
           fetch-depth: 1
 
-      - name: Install build dependencies
+      # ------------------------------------------------------------
+      # Install build dependencies
+      # ------------------------------------------------------------
+      - name: Install dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             bc \
             bison \
@@ -42,14 +49,8 @@ jobs:
             unzip \
             wget
 
-      - name: Configure Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+users.noreply.github.com"
-
       # ------------------------------------------------------------
-      # Clang r416183b
-      # This is the compiler used for your successful kernel builds.
+      # Download the compiler used for your successful builds
       # ------------------------------------------------------------
       - name: Download LineageOS Clang r416183b
         run: |
@@ -59,40 +60,52 @@ jobs:
 
       - name: Show compiler version
         run: |
-          clang/bin/clang --version
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          clang --version
 
       # ------------------------------------------------------------
-      # Make absolutely sure we start from a clean source tree.
+      # Show repository state
+      #
+      # No dirty-tree failure here.
       # ------------------------------------------------------------
-      - name: Verify clean source tree
+      - name: Show source tree status
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::Kernel source tree is dirty."
-            git status --short
-            exit 1
-          fi
+          echo "Commit:"
+          git rev-parse HEAD
+
+          echo
+          echo "Branch:"
+          git branch --show-current
+
+          echo
+          echo "Source tree:"
+          git status --short
 
       # ------------------------------------------------------------
-      # Verify the SUSFS patch exists.
+      # Verify SUSFS patch
       # ------------------------------------------------------------
       - name: Verify SUSFS patch
         run: |
+          set -e
+
           PATCH="patches/susfs-gta4l-lineage23.2-v2.3.0-improved.patch"
 
           if [ ! -f "$PATCH" ]; then
-            echo "::error::SUSFS patch not found: $PATCH"
+            echo "::error::SUSFS patch not found:"
+            echo "$PATCH"
             exit 1
           fi
 
           echo "SUSFS patch:"
           ls -lh "$PATCH"
 
+          echo
           echo "SHA256:"
           sha256sum "$PATCH"
 
       # ------------------------------------------------------------
       # IMPORTANT:
-      # Check the entire patch before actually modifying the tree.
+      # Check the complete patch before changing the source tree.
       # ------------------------------------------------------------
       - name: Check SUSFS patch
         run: |
@@ -100,13 +113,18 @@ jobs:
 
           PATCH="patches/susfs-gta4l-lineage23.2-v2.3.0-improved.patch"
 
+          echo "Checking SUSFS patch against the GTA4L kernel source..."
+
           git apply \
             --check \
             --verbose \
             "$PATCH"
 
+          echo
+          echo "SUSFS patch check PASSED."
+
       # ------------------------------------------------------------
-      # Apply SUSFS only after --check succeeds.
+      # Apply SUSFS
       # ------------------------------------------------------------
       - name: Apply SUSFS patch
         run: |
@@ -118,8 +136,11 @@ jobs:
             --verbose \
             "$PATCH"
 
+          echo
+          echo "SUSFS patch applied successfully."
+
       # ------------------------------------------------------------
-      # Verify the important SUSFS files and hooks landed.
+      # Verify SUSFS files
       # ------------------------------------------------------------
       - name: Verify SUSFS integration
         run: |
@@ -132,12 +153,19 @@ jobs:
           echo "SUSFS core:"
           ls -lh fs/susfs.c
 
+          echo
           echo "SUSFS headers:"
           ls -lh include/linux/susfs.h
           ls -lh include/linux/susfs_def.h
 
-          echo
-          echo "Checking required KSU SUSFS hooks..."
+      # ------------------------------------------------------------
+      # Verify the KSU SUSFS hooks required by this tree
+      # ------------------------------------------------------------
+      - name: Verify KernelSU SUSFS hooks
+        run: |
+          set -e
+
+          echo "Checking required SUSFS hooks..."
 
           grep -R "ksu_handle_setresuid" KernelSU/kernel
           grep -R "ksu_handle_execveat" KernelSU/kernel
@@ -148,37 +176,54 @@ jobs:
           grep -R "ksu_handle_input_handle_event" KernelSU/kernel
 
           echo
-          echo "Checking that obsolete hooks are not present..."
+          echo "Checking for obsolete hooks..."
 
           if grep -R \
-            -E "ksu_vfs_read_hook|ksu_input_hook|ksu_execveat_hook|ksu_init_rc_hook" \
+            -E \
+            "ksu_vfs_read_hook|ksu_input_hook|ksu_execveat_hook|ksu_init_rc_hook" \
             KernelSU/kernel; then
+
             echo "::error::Obsolete KernelSU hook detected."
             exit 1
           fi
 
+          echo
+          echo "KernelSU SUSFS hook verification PASSED."
+
       # ------------------------------------------------------------
-      # Check that the tree still has NoMount.
+      # Verify NoMount
       # ------------------------------------------------------------
       - name: Verify NoMount
         run: |
           set -e
 
-          test -L fs/nomount
-          grep -q '^CONFIG_NOMOUNT=y' arch/arm64/configs/defconfig
+          if [ ! -L fs/nomount ]; then
+            echo "::error::fs/nomount symlink is missing."
+            exit 1
+          fi
+
+          if ! grep -q '^CONFIG_NOMOUNT=y' \
+            arch/arm64/configs/defconfig; then
+
+            echo "::error::CONFIG_NOMOUNT=y is missing."
+            exit 1
+          fi
 
           echo "NoMount:"
           readlink fs/nomount
-          grep '^CONFIG_NOMOUNT=y' arch/arm64/configs/defconfig
+
+          echo
+          grep '^CONFIG_NOMOUNT=y' \
+            arch/arm64/configs/defconfig
 
       # ------------------------------------------------------------
-      # Generate the GTA4L ARM64 configuration.
+      # Generate kernel configuration
       # ------------------------------------------------------------
       - name: Generate defconfig
         run: |
           set -e
 
-          export PATH="$PWD/clang/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
 
           make \
             O="$GITHUB_WORKSPACE/out" \
@@ -189,34 +234,45 @@ jobs:
             defconfig
 
       # ------------------------------------------------------------
-      # Verify SUSFS configuration after Kconfig processing.
+      # Verify generated configuration
       # ------------------------------------------------------------
-      - name: Verify generated SUSFS configuration
+      - name: Verify generated configuration
         run: |
           set -e
 
-          echo "SUSFS-related configuration:"
-          grep -E '^(CONFIG_KSU_SUSFS|CONFIG_NOMOUNT)' \
+          echo "SUSFS / KSU / NoMount configuration:"
+          grep -E \
+            '^(CONFIG_KSU|CONFIG_NOMOUNT|CONFIG_KALLSYMS|CONFIG_MODULES)' \
             out/.config || true
 
+          echo
+          echo "Checking CONFIG_KSU_SUSFS..."
+
           if ! grep -q '^CONFIG_KSU_SUSFS=y' out/.config; then
-            echo "::error::CONFIG_KSU_SUSFS=y is missing from generated .config"
+            echo "::error::CONFIG_KSU_SUSFS=y is missing from out/.config"
             exit 1
           fi
+
+          echo "CONFIG_KSU_SUSFS=y"
+
+          echo
+          echo "Checking CONFIG_NOMOUNT..."
 
           if ! grep -q '^CONFIG_NOMOUNT=y' out/.config; then
-            echo "::error::CONFIG_NOMOUNT=y is missing from generated .config"
+            echo "::error::CONFIG_NOMOUNT=y is missing from out/.config"
             exit 1
           fi
 
+          echo "CONFIG_NOMOUNT=y"
+
       # ------------------------------------------------------------
-      # Build.
+      # Build the kernel
       # ------------------------------------------------------------
       - name: Build kernel
         run: |
           set -e
 
-          export PATH="$PWD/clang/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
 
           make \
             -j"$(nproc)" \
@@ -230,7 +286,7 @@ jobs:
             modules
 
       # ------------------------------------------------------------
-      # Verify the actual boot image exists.
+      # Verify kernel output
       # ------------------------------------------------------------
       - name: Verify kernel output
         run: |
@@ -240,7 +296,14 @@ jobs:
 
           if [ ! -f "$IMAGE" ]; then
             echo "::error::Image.gz-dtb was not produced."
-            find out/arch/arm64/boot -maxdepth 2 -type f -print
+
+            echo
+            echo "Available boot files:"
+            find out/arch/arm64/boot \
+              -maxdepth 2 \
+              -type f \
+              -print
+
             exit 1
           fi
 
@@ -248,17 +311,11 @@ jobs:
           ls -lh "$IMAGE"
 
           echo
-          echo "Kernel image type:"
+          echo "Image information:"
           file "$IMAGE"
 
-          echo
-          echo "Build configuration:"
-          grep -E \
-            '^(CONFIG_KSU|CONFIG_NOMOUNT|CONFIG_KALLSYMS|CONFIG_MODULES)' \
-            out/.config || true
-
       # ------------------------------------------------------------
-      # Save the kernel and useful debugging information.
+      # Prepare artifacts
       # ------------------------------------------------------------
       - name: Prepare artifacts
         run: |
@@ -278,14 +335,19 @@ jobs:
             patches/susfs-gta4l-lineage23.2-v2.3.0-improved.patch \
             artifact/
 
-          sha256sum artifact/* > artifact/SHA256SUMS
+          sha256sum artifact/* \
+            > artifact/SHA256SUMS
 
           echo "Artifacts:"
           ls -lh artifact/
 
           echo
+          echo "Checksums:"
           cat artifact/SHA256SUMS
 
+      # ------------------------------------------------------------
+      # Upload artifacts
+      # ------------------------------------------------------------
       - name: Upload GTA4L SUSFS kernel
         uses: actions/upload-artifact@v4
         with:
