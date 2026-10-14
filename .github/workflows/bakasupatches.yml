@@ -1,0 +1,96 @@
+name: Apply BakaSU Hooks Patch
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: bakasu-hooks-lineage-24.0
+  cancel-in-progress: false
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: robot360-upload/android_kernel_samsung_sm6115
+          ref: lineage-24.0
+          path: kernel
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Clone patches repository
+        uses: actions/checkout@v4
+        with:
+          repository: robot360-upload/patches
+          path: patches
+          fetch-depth: 1
+      - name: Locate BakaSU patch
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCH="patches/bakasu_hooks_corrected"
+          if [[ ! -f "$PATCH" ]]; then
+            echo "::error::Patch not found: $PATCH"
+            echo "Check the filename and path in robot360-upload/patches."
+            exit 1
+          fi
+          if [[ ! -s "$PATCH" ]]; then
+            echo "::error::Patch file is empty."
+            exit 1
+          fi
+          echo "Patch found:"
+          ls -lh "$PATCH"
+          echo "patch_path=$GITHUB_WORKSPACE/$PATCH" >> "$GITHUB_OUTPUT"
+      - name: Configure Git
+        working-directory: kernel
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Check patch compatibility
+        working-directory: kernel
+        env:
+          PATCH_FILE: ${{ steps.locate.outputs.patch_path }}
+        run: |
+          set -euo pipefail
+          if git apply --check "$PATCH_FILE"; then
+            echo "Patch applies cleanly."
+          elif git apply --reverse --check "$PATCH_FILE"; then
+            echo "::error::Patch appears to be already applied."
+            echo "Stopping to avoid an unnecessary commit."
+            exit 1
+          else
+            echo "::error::Patch is incompatible with the current source."
+            echo "No changes have been applied."
+            exit 1
+          fi
+      - name: Apply BakaSU hooks patch
+        working-directory: kernel
+        env:
+          PATCH_FILE: ${{ steps.locate.outputs.patch_path }}
+        run: |
+          set -euo pipefail
+          git apply --verbose "$PATCH_FILE"
+          git diff --check
+          echo "Applied changes:"
+          git status --short
+          git diff --stat
+      - name: Commit and push
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "::error::Patch produced no changes."
+            exit 1
+          fi
+          git add -u
+          git add .
+          git commit -m "kernel: integrate BakaSU hooks"
+          git push origin HEAD:lineage-24.0
+      - name: Summary
+        if: success()
+        working-directory: kernel
+        run: |
+          echo "BakaSU hooks patch applied and pushed successfully."
+          git log -1 --oneline
