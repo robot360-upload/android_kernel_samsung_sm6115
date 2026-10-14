@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PATCH="patches/bakasu_hooks_corrected"
+          PATCH="patches/bakasu_hooks_corrected.patch"
           if [[ ! -f "$PATCH" ]]; then
             echo "::error::Patch not found: $PATCH"
             echo "Check the filename and path in robot360-upload/patches."
