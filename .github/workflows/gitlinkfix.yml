@@ -1,0 +1,96 @@
+name: Recreate BakaSU and NoMount Submodules
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: recreate-submodules-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  recreate-submodules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: lineage-24.0
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: true
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Remove old submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Remove the old gitlinks from the Git index.
+          for path in KernelSU NoMount; do
+            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              git rm -f --cached "$path"
+            fi
+            # Remove any leftover submodule working directories.
+            rm -rf "$path"
+          done
+          # Remove the previous submodule configuration.
+          if [ -f .gitmodules ]; then
+            git rm -f .gitmodules
+          fi
+          # Remove stale local submodule metadata.
+          rm -rf .git/modules/KernelSU
+          rm -rf .git/modules/NoMount
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --cached --quiet; then
+            git commit -m "Remove broken BakaSU and NoMount submodules"
+            git push origin HEAD:lineage-24.0
+          else
+            echo "No cleanup changes to commit."
+          fi
+      - name: Add BakaSU submodule
+        run: |
+          set -euo pipefail
+          git submodule add \
+            https://github.com/Baka-SU/BakaSU.git \
+            KernelSU
+      - name: Add NoMount submodule
+        run: |
+          set -euo pipefail
+          git submodule add -b dev \
+            https://github.com/maxsteeel/nomount.git \
+            NoMount
+      - name: Validate submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "===== .gitmodules ====="
+          cat .gitmodules
+          echo "===== Submodule status ====="
+          git submodule status
+          echo "===== Git index ====="
+          git ls-files --stage KernelSU NoMount
+          # Verify that both paths are registered as gitlinks.
+          for path in KernelSU NoMount; do
+            mode="$(git ls-files --stage "$path" | awk 'NR == 1 {print $1}')"
+            if [ "$mode" != "160000" ]; then
+              echo "::error::$path is not registered as a Git submodule (mode 160000)."
+              exit 1
+            fi
+          done
+          # Verify both submodule working directories have commits checked out.
+          git -C KernelSU rev-parse --verify HEAD
+          git -C NoMount rev-parse --verify HEAD
+      - name: Commit recreated submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add .gitmodules KernelSU NoMount
+          git commit -m "Recreate BakaSU and NoMount submodules"
+          git push origin HEAD:lineage-24.0
+      - name: Verify pushed submodules
+        run: |
+          git fetch origin lineage-24.0
+          git ls-tree origin/lineage-24.0 KernelSU NoMount
