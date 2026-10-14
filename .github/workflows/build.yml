@@ -94,19 +94,46 @@ jobs:
       - name: Configure kernel
         run: |
           set -euo pipefail
+
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
+
+          # 1. Load the device-specific configuration
           make O=out vendor/bengal-perf_defconfig
+
+          # 2. Extract only the existing KSU settings from generic defconfig
+          grep -E '^(CONFIG_KSU=|CONFIG_KSU_MANUAL_HOOK=|CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=)' \
+            arch/arm64/configs/defconfig > out/ksu.config
+
+          # 3. Explicitly select manual hooks instead of tracepoint hooks
+          cat >> out/ksu.config <<'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_MANUAL_HOOK=y
+          CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y
+          # CONFIG_KSU_TRACEPOINT_HOOK is not set
+          EOF
+
+          # 4. Merge only the selected settings
+          scripts/kconfig/merge_config.sh \
+            -O out \
+            out/.config \
+            out/ksu.config
+
+          # 5. Apply device-specific configuration
           scripts/kconfig/merge_config.sh \
             -O out \
             out/.config \
             arch/arm64/configs/vendor/gta4l-common.config
+
+          # 6. Resolve dependencies and Kconfig choices
           make O=out olddefconfig
+
+          # 7. Save and verify the resulting configuration
           cp out/.config kernel.config
-          echo "Configuration summary:"
-          grep -E \
-            'CONFIG_(ARM64|KALLSYMS|MODULES|LTO|KSU|SUSFS)=' \
+
+          echo "===== BakaSU configuration ====="
+          grep -E '^(CONFIG_KSU=|CONFIG_KSU_MANUAL_HOOK=|CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=|CONFIG_KSU_TRACEPOINT_HOOK=|# CONFIG_KSU_TRACEPOINT_HOOK is not set)' \
             out/.config || true
       - name: Build Image and Image.gz
         id: build
