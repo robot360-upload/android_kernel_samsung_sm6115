@@ -1,4 +1,4 @@
-name: Build Galaxy Tab A7 Kernel
+name: Build SM6115 Kernel with Neutron Clang
 on:
   workflow_dispatch:
 permissions:
@@ -14,30 +14,44 @@ jobs:
           repository: robot360-upload/android_kernel_samsung_sm6115
           ref: lineage-24.0
           fetch-depth: 1
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             bc \
             bison \
             build-essential \
+            cpio \
+            curl \
             flex \
-            libssl-dev \
             libelf-dev \
             libncurses-dev \
+            libssl-dev \
             python3 \
             rsync \
             unzip \
-            zip \
-            lld \
-            clang \
-            llvm
-      - name: Check toolchain
+            zip
+      - name: Download Neutron Clang
         run: |
+          mkdir -p "$HOME/toolchains/neutron-clang"
+          cd "$HOME/toolchains/neutron-clang"
+          curl -fL \
+            https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman \
+            -o antman
+          chmod +x antman
+          ./antman -S
+          echo "$HOME/toolchains/neutron-clang/bin" >> "$GITHUB_PATH"
+      - name: Verify toolchain
+        run: |
+          export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
+          command -v clang
+          command -v ld.lld || true
           clang --version
-          ld.lld --version
-          make --version
-      - name: Verify configuration files
+          if [ ! -x "$HOME/toolchains/neutron-clang/bin/clang" ]; then
+            echo "Neutron Clang was not installed at the expected path."
+            exit 1
+          fi
+      - name: Verify kernel configuration files
         run: |
           test -f arch/arm64/configs/vendor/bengal-perf_defconfig
           test -f arch/arm64/configs/vendor/gta4l-common.config
@@ -45,34 +59,47 @@ jobs:
       - name: Generate base configuration
         run: |
           export ARCH=arm64
-          export LLVM=1
+          export CC=clang
           export LLVM_IAS=1
-          make O=out vendor/bengal-perf_defconfig
+          export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
+          make O=out \
+            CC=clang \
+            LLVM_IAS=1 \
+            vendor/bengal-perf_defconfig
       - name: Merge device configuration
         run: |
           export ARCH=arm64
-          export LLVM=1
+          export CC=clang
           export LLVM_IAS=1
+          export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
           scripts/kconfig/merge_config.sh \
             -O out \
             -m out/.config \
             arch/arm64/configs/vendor/gta4l-common.config
-          make O=out olddefconfig
+          make O=out \
+            CC=clang \
+            LLVM_IAS=1 \
+            olddefconfig
       - name: Build kernel Image
         run: |
           export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
-          make O=out -j2 Image
+          export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
+          make O=out \
+            ARCH=arm64 \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            LLVM_IAS=1 \
+            -j2 \
+            Image
       - name: Verify kernel image
         run: |
           test -s out/arch/arm64/boot/Image
           file out/arch/arm64/boot/Image
           ls -lh out/arch/arm64/boot/Image
-      - name: Upload kernel artifact
+      - name: Upload kernel Image
         uses: actions/upload-artifact@v4
         with:
-          name: gta4l-kernel-Image
+          name: gta4l-neutron-clang-Image
           path: out/arch/arm64/boot/Image
           if-no-files-found: error
           retention-days: 14
