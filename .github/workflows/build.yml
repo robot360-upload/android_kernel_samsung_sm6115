@@ -29,28 +29,32 @@ jobs:
             libssl-dev \
             python3 \
             rsync \
+            tar \
             unzip \
-            zip
+            zstd
       - name: Download Neutron Clang
         run: |
-          mkdir -p "$HOME/toolchains/neutron-clang"
-          cd "$HOME/toolchains/neutron-clang"
+          set -e
+          TOOLCHAIN="$HOME/toolchains/neutron-clang"
+          mkdir -p "$TOOLCHAIN"
+          cd "$TOOLCHAIN"
           curl -fL \
             https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman \
             -o antman
           chmod +x antman
           ./antman -S
-          echo "$HOME/toolchains/neutron-clang/bin" >> "$GITHUB_PATH"
-      - name: Verify toolchain
+          echo "$TOOLCHAIN/bin" >> "$GITHUB_PATH"
+      - name: Verify Neutron Clang and LLVM linker
         run: |
-          export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
+          set -e
+          TOOLCHAIN="$HOME/toolchains/neutron-clang"
+          export PATH="$TOOLCHAIN/bin:$PATH"
           command -v clang
-          command -v ld.lld || true
+          command -v ld.lld
           clang --version
-          if [ ! -x "$HOME/toolchains/neutron-clang/bin/clang" ]; then
-            echo "Neutron Clang was not installed at the expected path."
-            exit 1
-          fi
+          ld.lld --version
+          test -x "$TOOLCHAIN/bin/clang"
+          test -x "$TOOLCHAIN/bin/ld.lld"
       - name: Verify kernel configuration files
         run: |
           test -f arch/arm64/configs/vendor/bengal-perf_defconfig
@@ -58,18 +62,22 @@ jobs:
           test -f scripts/kconfig/merge_config.sh
       - name: Generate base configuration
         run: |
+          set -e
           export ARCH=arm64
-          export CC=clang
+          export LLVM=1
           export LLVM_IAS=1
           export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
           make O=out \
-            CC=clang \
+            ARCH=arm64 \
+            LLVM=1 \
             LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
             vendor/bengal-perf_defconfig
       - name: Merge device configuration
         run: |
+          set -e
           export ARCH=arm64
-          export CC=clang
+          export LLVM=1
           export LLVM_IAS=1
           export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
           scripts/kconfig/merge_config.sh \
@@ -77,25 +85,32 @@ jobs:
             -m out/.config \
             arch/arm64/configs/vendor/gta4l-common.config
           make O=out \
-            CC=clang \
+            ARCH=arm64 \
+            LLVM=1 \
             LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
             olddefconfig
       - name: Build kernel Image
         run: |
+          set -e
           export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
           export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
           make O=out \
             ARCH=arm64 \
-            CC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
+            LLVM=1 \
             LLVM_IAS=1 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
             -j2 \
             Image
       - name: Verify kernel image
         run: |
-          test -s out/arch/arm64/boot/Image
-          file out/arch/arm64/boot/Image
-          ls -lh out/arch/arm64/boot/Image
+          set -e
+          IMAGE="out/arch/arm64/boot/Image"
+          test -s "$IMAGE"
+          file "$IMAGE"
+          ls -lh "$IMAGE"
       - name: Upload kernel Image
         uses: actions/upload-artifact@v4
         with:
