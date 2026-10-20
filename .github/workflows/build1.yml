@@ -90,31 +90,10 @@ jobs:
             LLVM_IAS=1 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             olddefconfig
-      - name: Build kernel Image
-        run: |
-          set -e
-          export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
-          export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
-          make O=out \
-            ARCH=arm64 \
-            LLVM=1 \
-            LLVM_IAS=1 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            -j2 \
-            Image
-      - name: Verify kernel image
-        run: |
-          set -e
-          IMAGE="out/arch/arm64/boot/Image"
-          test -s "$IMAGE"
-          file "$IMAGE"
-          ls -lh "$IMAGE"
-      - name: Upload kernel Image
+      - name: Save kernel configuration
         uses: actions/upload-artifact@v4
         with:
-          name: gta4l-neutron-clang-Image
-          path: out/arch/arm64/boot/Image
+          name: gta4l-kernel-config
+          path: out/.config
           if-no-files-found: error
           retention-days: 14
