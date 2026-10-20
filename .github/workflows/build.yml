@@ -1,0 +1,78 @@
+name: Build Galaxy Tab A7 Kernel
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: robot360-upload/android_kernel_samsung_sm6115
+          ref: lineage-24.0
+          fetch-depth: 1
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc \
+            bison \
+            build-essential \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            libncurses-dev \
+            python3 \
+            rsync \
+            unzip \
+            zip \
+            lld \
+            clang \
+            llvm
+      - name: Check toolchain
+        run: |
+          clang --version
+          ld.lld --version
+          make --version
+      - name: Verify configuration files
+        run: |
+          test -f arch/arm64/configs/vendor/bengal-perf_defconfig
+          test -f arch/arm64/configs/vendor/gta4l-common.config
+          test -f scripts/kconfig/merge_config.sh
+      - name: Generate base configuration
+        run: |
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          make O=out vendor/bengal-perf_defconfig
+      - name: Merge device configuration
+        run: |
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          scripts/kconfig/merge_config.sh \
+            -O out \
+            -m out/.config \
+            arch/arm64/configs/vendor/gta4l-common.config
+          make O=out olddefconfig
+      - name: Build kernel Image
+        run: |
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          make O=out -j2 Image
+      - name: Verify kernel image
+        run: |
+          test -s out/arch/arm64/boot/Image
+          file out/arch/arm64/boot/Image
+          ls -lh out/arch/arm64/boot/Image
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gta4l-kernel-Image
+          path: out/arch/arm64/boot/Image
+          if-no-files-found: error
+          retention-days: 14
