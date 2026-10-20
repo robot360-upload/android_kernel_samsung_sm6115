@@ -1,0 +1,185 @@
+name: Find Kernel Defconfig
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_tree_repo:
+        description: "Device tree repository (owner/repo)"
+        required: true
+        default: "robot360-upload/android_device_samsung_gta4l"
+        type: string
+
+      common_tree_repo:
+        description: "Common device tree repository (owner/repo)"
+        required: false
+        default: "robot360-upload/android_device_samsung_gta4l-common"
+        type: string
+
+      device_tree_ref:
+        description: "Device tree branch or tag (blank = default branch)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  find-defconfig:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel repository
+        uses: actions/checkout@v4
+        with:
+          path: kernel
+
+      - name: Set up Git
+        run: |
+          git config --global advice.detachedHead false
+
+      - name: Inspect kernel repository
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          mkdir -p report
+
+          {
+            echo "# Kernel Defconfig Investigation"
+            echo
+            echo "## Kernel revision"
+            git -C kernel log -1 --format='%H%n%s'
+            echo
+            echo "## Available defconfig and config files"
+            find kernel/arch/arm64/configs \
+              -type f \
+              \( -name '*defconfig' -o -name '*.config' \) \
+              -print | sort
+
+            echo
+            echo "## References to kernel configuration"
+            git -C kernel grep -n -I -E \
+              'bengal(-lite)?(-perf)?_defconfig|gta4l-common\.config|merge_config\.sh|TARGET_KERNEL_CONFIG|BOARD_KERNEL_CONFIG|KERNEL_DEFCONFIG|DEFCONFIG' \
+              HEAD -- \
+              ':!*.patch' \
+              ':!.github/workflows/*' || true
+
+            echo
+            echo "## Kernel build scripts"
+            find kernel -maxdepth 4 -type f \
+              \( -name 'build.sh' -o -name 'Makefile' \
+                 -o -name '*.mk' -o -name '*.sh' \) \
+              -not -path 'kernel/.git/*' \
+              -print | sort | head -300
+          } | tee report/kernel-report.txt
+
+      - name: Inspect device tree repositories
+        shell: bash
+        env:
+          DEVICE_TREE_REPO: ${{ inputs.device_tree_repo }}
+          COMMON_TREE_REPO: ${{ inputs.common_tree_repo }}
+          DEVICE_TREE_REF: ${{ inputs.device_tree_ref }}
+        run: |
+          set -uo pipefail
+
+          inspect_repo() {
+            local repo="$1"
+            local label="$2"
+            local destination="$3"
+
+            echo
+            echo "========================================"
+            echo "Inspecting: $repo"
+            echo "========================================"
+
+            if [[ -z "$repo" ]]; then
+              echo "Repository not supplied; skipping."
+              return 0
+            fi
+
+            if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+              echo "Invalid repository format: $repo"
+              return 0
+            fi
+
+            local url="https://github.com/${repo}.git"
+
+            if [[ -n "$DEVICE_TREE_REF" ]]; then
+              if ! git clone --depth=1 \
+                --branch "$DEVICE_TREE_REF" \
+                "$url" "$destination"; then
+                echo "Could not clone requested ref: $DEVICE_TREE_REF"
+                return 0
+              fi
+            else
+              if ! git clone --depth=1 "$url" "$destination"; then
+                echo "Could not clone repository: $repo"
+                return 0
+              fi
+            fi
+
+            {
+              echo "# $label"
+              echo
+              echo "Repository: $repo"
+              echo "Revision:"
+              git -C "$destination" log -1 --format='%H%n%s'
+              echo
+              echo "## Relevant configuration references"
+
+              git -C "$destination" grep -n -I -E \
+                'TARGET_KERNEL_CONFIG|BOARD_KERNEL_CONFIG|KERNEL_DEFCONFIG|KERNEL_CONFIG|bengal(-lite)?(-perf)?_defconfig|gta4l-common\.config|merge_config\.sh|CONFIG_FILE|DEFCONFIG' \
+                HEAD -- \
+                ':!*.patch' || true
+
+              echo
+              echo "## Build-related files"
+
+              find "$destination" -type f \
+                \( -name '*.mk' -o -name '*.bp' \
+                   -o -name '*.sh' -o -name '*.py' \
+                   -o -name 'BoardConfig*' \
+                   -o -name 'AndroidProducts.mk' \
+                   -o -name 'vendorsetup.sh' \) \
+                -not -path '*/.git/*' \
+                -print | sort | head -300
+            } | tee "report/${label}.txt"
+          }
+
+          inspect_repo \
+            "$DEVICE_TREE_REPO" \
+            "device-tree-report" \
+            "device-tree"
+
+          inspect_repo \
+            "$COMMON_TREE_REPO" \
+            "common-tree-report" \
+            "common-tree"
+
+      - name: Create combined report
+        if: always()
+        run: |
+          {
+            echo "# Kernel Defconfig Investigation"
+            echo
+            for file in report/*.txt; do
+              [[ -f "$file" ]] || continue
+              echo
+              echo "---"
+              echo
+              cat "$file"
+            done
+          } > report/combined-report.md
+
+          echo "Report files:"
+          ls -lh report/
+
+      - name: Upload investigation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-defconfig-investigation
+          path: report/
+          if-no-files-found: warn
+          retention-days: 14
