@@ -68,10 +68,10 @@ jobs:
             echo
             echo "## Kernel build scripts"
             find kernel -maxdepth 4 -type f \
-              \( -name 'build.sh' -o -name 'Makefile' \
-                 -o -name '*.mk' -o -name '*.sh' \) \
-              -not -path 'kernel/.git/*' \
-              -print | sort | head -300
+            \( -name 'build.sh' -o -name 'Makefile' \
+               -o -name '*.mk' -o -name '*.sh' \) \
+            -not -path 'kernel/.git/*' \
+            -print | sort | sed -n '1,300p'
           } | tee report/kernel-report.txt
 
       - name: Inspect device tree repositories
