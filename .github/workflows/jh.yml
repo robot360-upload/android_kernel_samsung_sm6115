@@ -1,0 +1,48 @@
+name: List Kernel Configs
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  list-configs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+      - name: List all kernel configuration files
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo " Kernel configuration files"
+          echo "=========================================="
+          find arch/arm64/configs -maxdepth 2 -type f \
+            \( -name '*defconfig' -o -name '*.config' \) \
+            | sort
+      - name: Inspect device-specific configurations
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo " References to relevant configurations"
+          echo "=========================================="
+          grep -R -nE \
+            'bengal-perf_defconfig|gta4l-common.config' \
+            --include='*.mk' \
+            --include='*.sh' \
+            --include='*.bp' \
+            --include='*.yaml' \
+            --include='*.yml' \
+            . \
+            --exclude-dir=.git || true
+      - name: Verify expected configuration files
+        shell: bash
+        run: |
+          for file in \
+            arch/arm64/configs/vendor/bengal-perf_defconfig \
+            arch/arm64/configs/vendor/gta4l-common.config
+          do
+            if [ -f "$file" ]; then
+              echo "[FOUND] $file"
+            else
+              echo "[NOT FOUND] $file"
+            fi
+          done
