@@ -71,7 +71,6 @@ jobs:
             ARCH=arm64 \
             LLVM=1 \
             LLVM_IAS=1 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
             vendor/bengal-perf_defconfig
       - name: Merge device configuration
         run: |
@@ -88,7 +87,6 @@ jobs:
             ARCH=arm64 \
             LLVM=1 \
             LLVM_IAS=1 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
             olddefconfig
       - name: Build kernel Image
         run: |
@@ -101,7 +99,6 @@ jobs:
             ARCH=arm64 \
             LLVM=1 \
             LLVM_IAS=1 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
             -j2 \
             Image
       - name: Verify kernel image
