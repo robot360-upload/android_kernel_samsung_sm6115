@@ -84,5 +84,6 @@ jobs:
         with:
           name: gta4l-kernel-config
           path: out/.config
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
