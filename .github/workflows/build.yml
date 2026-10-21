@@ -14,39 +14,6 @@ jobs:
           repository: robot360-upload/android_kernel_samsung_sm6115
           ref: lineage-24.0
           fetch-depth: 1
-      - name: Integrate KernelSU-Next
-        run: |
-          set -eu
-
-          curl -fLSs \
-            "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
-            | bash -s legacy
-
-          test -f drivers/kernelsu/Kconfig
-          echo "KernelSU-Next integration completed."
-      - name: Enable KernelSU-Next configuration
-        run: |
-          set -eu
-
-          DEFCONFIG="arch/arm64/configs/vendor/bengal-perf_defconfig"
-
-          # Enable KernelSU-Next and its Kprobe hooks.
-          for option in \
-            CONFIG_KPROBES \
-            CONFIG_KPROBE_EVENTS \
-            CONFIG_KSU_KPROBE_HOOKS \
-            CONFIG_KSU
-          do
-            if grep -q "^${option}=" "$DEFCONFIG"; then
-              sed -i "s/^${option}=.*/${option}=y/" "$DEFCONFIG"
-            else
-              sed -i "/^# ${option} is not set$/d" "$DEFCONFIG"
-              printf '%s=y\n' "$option" >> "$DEFCONFIG"
-            fi
-          done
-
-          echo "KernelSU-Next configuration entries added:"
-          grep -E '^CONFIG_(KPROBES|KPROBE_EVENTS|KSU_KPROBE_HOOKS|KSU)=y$' "$DEFCONFIG"
       - name: Install dependencies
         run: |
           sudo apt-get update
