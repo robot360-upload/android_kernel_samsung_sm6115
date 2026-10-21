@@ -1,0 +1,88 @@
+name: Generate SM6115 Kernel Config
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: robot360-upload/android_kernel_samsung_sm6115
+          ref: lineage-24.0
+          fetch-depth: 1
+      - name: Install dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc \
+            bison \
+            build-essential \
+            flex \
+            libelf-dev \
+            libncurses-dev \
+            libssl-dev \
+            python3 \
+            rsync
+      - name: Download Neutron Clang
+        run: |
+          set -e
+          TOOLCHAIN="$HOME/toolchains/neutron-clang"
+          mkdir -p "$TOOLCHAIN"
+          cd "$TOOLCHAIN"
+          curl -fLSs \
+            "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman" \
+            -o antman
+          chmod +x antman
+          ./antman -S
+          echo "$TOOLCHAIN/bin" >> "$GITHUB_PATH"
+      - name: Verify toolchain
+        run: |
+          set -e
+          command -v clang
+          command -v ld.lld
+          clang --version
+          ld.lld --version
+      - name: Verify configuration files
+        run: |
+          set -e
+          test -f arch/arm64/configs/vendor/bengal-perf_defconfig
+          test -f arch/arm64/configs/vendor/gta4l-common.config
+          test -f scripts/kconfig/merge_config.sh
+      - name: Generate base configuration
+        run: |
+          set -e
+          make O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            vendor/bengal-perf_defconfig
+      - name: Merge device configuration
+        run: |
+          set -e
+          scripts/kconfig/merge_config.sh \
+            -O out \
+            -m out/.config \
+            arch/arm64/configs/vendor/gta4l-common.config
+          make O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            olddefconfig
+      - name: Verify generated configuration
+        run: |
+          set -e
+          test -s out/.config
+          echo "Kernel configuration generated successfully."
+          wc -l out/.config
+      - name: Upload kernel configuration
+        uses: actions/upload-artifact@v4
+        with:
+          name: gta4l-kernel-config
+          path: out/.config
+          if-no-files-found: error
+          retention-days: 14
