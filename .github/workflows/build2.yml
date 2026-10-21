@@ -134,10 +134,14 @@ jobs:
           test -x "$TOOLCHAIN/bin/clang"
           test -x "$TOOLCHAIN/bin/ld.lld"
       - name: Verify kernel configuration files
+        shell: bash
         run: |
+          set -euo pipefail
           test -f arch/arm64/configs/vendor/bengal-perf_defconfig
           test -f arch/arm64/configs/vendor/gta4l-common.config
+          test -f arch/arm64/configs/vendor/droidspaces.config
           test -f scripts/kconfig/merge_config.sh
+          echo "All required kernel configuration files exist."
       - name: Generate base configuration
         run: |
           set -euo pipefail
@@ -150,43 +154,154 @@ jobs:
             LLVM=1 \
             LLVM_IAS=1 \
             vendor/bengal-perf_defconfig
-      - name: Merge device configuration
+      - name: Merge device and DroidSpaces configuration
+        shell: bash
         run: |
           set -euo pipefail
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
           export PATH="$HOME/toolchains/neutron-clang/bin:$PATH"
+
           scripts/kconfig/merge_config.sh \
             -O out \
             -m out/.config \
-            arch/arm64/configs/vendor/gta4l-common.config
+            arch/arm64/configs/vendor/gta4l-common.config \
+            arch/arm64/configs/vendor/droidspaces.config
+
           make O=out \
             ARCH=arm64 \
             LLVM=1 \
             LLVM_IAS=1 \
             olddefconfig
       - name: Verify final kernel configuration
+        shell: bash
         run: |
           set -euo pipefail
+
           CONFIG="out/.config"
+          FRAGMENT="arch/arm64/configs/vendor/droidspaces.config"
+
+          test -s "$CONFIG"
+          test -s "$FRAGMENT"
+
+          echo "Checking BakaSU and NoMount configuration..."
+
           grep -qx 'CONFIG_LOCALVERSION=""' "$CONFIG"
           grep -qx '# CONFIG_LOCALVERSION_AUTO is not set' "$CONFIG"
           grep -qx 'CONFIG_KSU=y' "$CONFIG"
           grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' "$CONFIG"
           grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y' "$CONFIG"
           grep -qx 'CONFIG_NOMOUNT=y' "$CONFIG"
-          # Verify the automatic hooks expected for this Linux 4.19 integration.
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK=y' "$CONFIG"
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK=y' "$CONFIG"
-          # The selected hooking method must be manual, not tracepoint.
+
           if grep -qx 'CONFIG_KSU_TRACEPOINT_HOOK=y' "$CONFIG"; then
-            echo "ERROR: tracepoint hooking is enabled instead of manual hooking." >&2
+            echo "::error::Tracepoint hooking is enabled instead of manual hooking."
             exit 1
           fi
-          grep -E \
-            '^(CONFIG_LOCALVERSION=|# CONFIG_LOCALVERSION_AUTO|CONFIG_KSU=|CONFIG_KSU_MANUAL_HOOK=|CONFIG_KSU_MANUAL_HOOK_AUTO_|CONFIG_NOMOUNT=)' \
-            "$CONFIG"
+
+          echo "Checking every setting in droidspaces.config..."
+
+          checked=0
+          failed=0
+
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Ignore blank lines and comments.
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+            line="$(printf '%s' "$line" |
+              sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+            [ -n "$line" ] || continue
+
+            case "$line" in
+              CONFIG_*=*)
+                symbol="${line%%=*}"
+                value="${line#*=}"
+
+                case "$value" in
+                  y) expected="$symbol=y" ;;
+                  m) expected="$symbol=m" ;;
+                  n) expected="# $symbol is not set" ;;
+                  *) expected="$line" ;;
+      - name: Verify final kernel configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONFIG="out/.config"
+          FRAGMENT="arch/arm64/configs/vendor/droidspaces.config"
+
+          test -s "$CONFIG"
+          test -s "$FRAGMENT"
+
+          echo "Checking BakaSU and NoMount configuration..."
+
+          grep -qx 'CONFIG_LOCALVERSION=""' "$CONFIG"
+          grep -qx '# CONFIG_LOCALVERSION_AUTO is not set' "$CONFIG"
+          grep -qx 'CONFIG_KSU=y' "$CONFIG"
+          grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' "$CONFIG"
+          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y' "$CONFIG"
+          grep -qx 'CONFIG_NOMOUNT=y' "$CONFIG"
+
+          if grep -qx 'CONFIG_KSU_TRACEPOINT_HOOK=y' "$CONFIG"; then
+            echo "::error::Tracepoint hooking is enabled instead of manual hooking."
+            exit 1
+          fi
+
+          echo "Checking every setting in droidspaces.config..."
+
+          checked=0
+          failed=0
+
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Ignore blank lines and comments.
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+            line="$(printf '%s' "$line" |
+              sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+            [ -n "$line" ] || continue
+
+            case "$line" in
+              CONFIG_*=*)
+                symbol="${line%%=*}"
+                value="${line#*=}"
+
+                case "$value" in
+                  y) expected="$symbol=y" ;;
+                  m) expected="$symbol=m" ;;
+                  n) expected="# $symbol is not set" ;;
+                  *) expected="$line" ;;
+                esac
+
+                checked=$((checked + 1))
+
+                if grep -Fqx -- "$expected" "$CONFIG"; then
+                  echo "[OK] $symbol"
+                else
+                  echo "::error::Configuration mismatch: $line"
+                  grep -E "^(# )?$symbol(=| is not set$)" "$CONFIG" || \
+                    echo "  No corresponding setting found in $CONFIG"
+                  failed=$((failed + 1))
+                  fi
+                ;;
+            esac
+          done < "$FRAGMENT"
+
+          echo "DroidSpaces settings checked: $checked"
+          echo "Configuration mismatches: $failed"
+
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::No CONFIG assignments found in $FRAGMENT"
+            exit 1
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::$failed DroidSpaces setting(s) did not survive olddefconfig."
+            exit 1
+          fi
+
+          echo "All DroidSpaces fragment settings match the final .config."
       - name: Build kernel Image
         run: |
           set -euo pipefail
