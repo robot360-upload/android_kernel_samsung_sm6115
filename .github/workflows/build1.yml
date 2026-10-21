@@ -1,4 +1,4 @@
-name: Build SM6115 Kernel with Neutron Clang
+name: Build1 SM6115 Kernel with Neutron Clang
 on:
   workflow_dispatch:
 permissions:
