@@ -1,12 +1,16 @@
 name: Build2 SM6115 Kernel with Neutron Clang
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+
     steps:
       - name: Checkout kernel source
         uses: actions/checkout@v4
@@ -14,6 +18,7 @@ jobs:
           repository: robot360-upload/android_kernel_samsung_sm6115
           ref: lineage-24.0
           fetch-depth: 1
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -21,6 +26,7 @@ jobs:
             bc bison build-essential cpio curl flex git \
             libelf-dev libncurses-dev libssl-dev python3 \
             rsync tar unzip zstd
+
       - name: Apply DroidSpaces non-GKI patches
         shell: bash
         run: |
@@ -55,6 +61,7 @@ jobs:
           git diff --stat
           echo "Patch checksums:"
           sha256sum /tmp/droidspaces-patches/*.patch
+
       - name: Integrate BakaSU
         run: |
           set -euxo pipefail
@@ -66,6 +73,7 @@ jobs:
           git -C KernelSU rev-parse HEAD
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
           grep -q 'CONFIG_KSU' drivers/Makefile
+
       - name: Apply BakaSU Linux 4.19 manual-hook patch
         run: |
           set -euxo pipefail
@@ -77,6 +85,7 @@ jobs:
           git diff --check
           git diff --stat
           sha256sum /tmp/bakasu_hooks_corrected.patch
+
       - name: Integrate NoMount
         run: |
           set -euxo pipefail
@@ -89,6 +98,7 @@ jobs:
           git -C NoMount rev-parse HEAD
           grep -q 'CONFIG_NOMOUNT' fs/Makefile
           grep -q 'source "fs/nomount/Kconfig"' fs/Kconfig
+
       - name: Configure BakaSU, NoMount, and local version
         run: |
           set -euo pipefail
@@ -110,6 +120,7 @@ jobs:
           CONFIG_NOMOUNT=y
           EOF
           cat "$CONFIG"
+
       - name: Download Neutron Clang
         run: |
           set -euo pipefail
@@ -122,6 +133,7 @@ jobs:
           chmod +x antman
           ./antman -S
           echo "$TOOLCHAIN/bin" >> "$GITHUB_PATH"
+
       - name: Verify Neutron Clang and LLVM linker
         run: |
           set -euo pipefail
@@ -133,6 +145,7 @@ jobs:
           ld.lld --version
           test -x "$TOOLCHAIN/bin/clang"
           test -x "$TOOLCHAIN/bin/ld.lld"
+
       - name: Verify kernel configuration files
         shell: bash
         run: |
@@ -142,6 +155,7 @@ jobs:
           test -f arch/arm64/configs/vendor/droidspaces.config
           test -f scripts/kconfig/merge_config.sh
           echo "All required kernel configuration files exist."
+
       - name: Generate base configuration
         run: |
           set -euo pipefail
@@ -154,6 +168,7 @@ jobs:
             LLVM=1 \
             LLVM_IAS=1 \
             vendor/bengal-perf_defconfig
+
       - name: Merge device and DroidSpaces configuration
         shell: bash
         run: |
@@ -174,55 +189,7 @@ jobs:
             LLVM=1 \
             LLVM_IAS=1 \
             olddefconfig
-      - name: Verify final kernel configuration
-        shell: bash
-        run: |
-          set -euo pipefail
 
-          CONFIG="out/.config"
-          FRAGMENT="arch/arm64/configs/vendor/droidspaces.config"
-
-          test -s "$CONFIG"
-          test -s "$FRAGMENT"
-
-          echo "Checking BakaSU and NoMount configuration..."
-
-          grep -qx 'CONFIG_LOCALVERSION=""' "$CONFIG"
-          grep -qx '# CONFIG_LOCALVERSION_AUTO is not set' "$CONFIG"
-          grep -qx 'CONFIG_KSU=y' "$CONFIG"
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' "$CONFIG"
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y' "$CONFIG"
-          grep -qx 'CONFIG_NOMOUNT=y' "$CONFIG"
-
-          if grep -qx 'CONFIG_KSU_TRACEPOINT_HOOK=y' "$CONFIG"; then
-            echo "::error::Tracepoint hooking is enabled instead of manual hooking."
-            exit 1
-          fi
-
-          echo "Checking every setting in droidspaces.config..."
-
-          checked=0
-          failed=0
-
-          while IFS= read -r line || [ -n "$line" ]; do
-            # Ignore blank lines and comments.
-            [[ "$line" =~ ^[[:space:]]*# ]] && continue
-
-            line="$(printf '%s' "$line" |
-              sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-
-            [ -n "$line" ] || continue
-
-            case "$line" in
-              CONFIG_*=*)
-                symbol="${line%%=*}"
-                value="${line#*=}"
-
-                case "$value" in
-                  y) expected="$symbol=y" ;;
-                  m) expected="$symbol=m" ;;
-                  n) expected="# $symbol is not set" ;;
-                  *) expected="$line" ;;
       - name: Verify final kernel configuration
         shell: bash
         run: |
@@ -283,7 +250,7 @@ jobs:
                   grep -E "^(# )?$symbol(=| is not set$)" "$CONFIG" || \
                     echo "  No corresponding setting found in $CONFIG"
                   failed=$((failed + 1))
-                  fi
+                fi
                 ;;
             esac
           done < "$FRAGMENT"
@@ -302,6 +269,7 @@ jobs:
           fi
 
           echo "All DroidSpaces fragment settings match the final .config."
+
       - name: Build kernel Image
         run: |
           set -euo pipefail
@@ -315,6 +283,7 @@ jobs:
             LLVM_IAS=1 \
             -j2 \
             Image
+
       - name: Verify kernel image
         run: |
           set -euo pipefail
@@ -322,6 +291,7 @@ jobs:
           test -s "$IMAGE"
           file "$IMAGE"
           ls -lh "$IMAGE"
+
       - name: Upload kernel Image
         uses: actions/upload-artifact@v4
         with:
