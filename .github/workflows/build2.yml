@@ -22,57 +22,38 @@ jobs:
             libelf-dev libncurses-dev libssl-dev python3 \
             rsync tar unzip zstd
       - name: Apply DroidSpaces non-GKI patches
-
+        shell: bash
         run: |
-
-          set -euxo pipefail
-
+          set -euo pipefail
           mkdir -p /tmp/droidspaces-patches
-
-          curl -fL \
-
-            "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/01.fix_kernel_panic_in_xt_qtaguid.patch" \
-
+          echo "Downloading DroidSpaces non-GKI patches..."
+          curl -fL "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/01.fix_kernel_panic_in_xt_qtaguid.patch" \
             -o /tmp/droidspaces-patches/01.fix_kernel_panic_in_xt_qtaguid.patch
-
-          curl -fL \
-
-            "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch" \
-
+          curl -fL "https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/non-GKI/02.fix_restore%20cgroup%20file%20prefix%20handling%20.patch" \
             -o "/tmp/droidspaces-patches/02.fix_restore cgroup file prefix handling .patch"
-
-          # Patch 01 requires xt_qtaguid.c, which is absent from this kernel tree.
-
+          echo "Verifying downloaded patches..."
+          test -s /tmp/droidspaces-patches/01.fix_kernel_panic_in_xt_qtaguid.patch
+          test -s "/tmp/droidspaces-patches/02.fix_restore cgroup file prefix handling .patch"
+          echo "Checking patch 01..."
           if [ -f net/netfilter/xt_qtaguid.c ]; then
-
             patch --dry-run -p1 \
-
               < /tmp/droidspaces-patches/01.fix_kernel_panic_in_xt_qtaguid.patch
-
             patch -p1 \
-
               < /tmp/droidspaces-patches/01.fix_kernel_panic_in_xt_qtaguid.patch
-
           else
-
-            echo "::warning::Patch 01 not applicable: net/netfilter/xt_qtaguid.c is absent."
-
+            echo "::warning::Skipping patch 01 because net/netfilter/xt_qtaguid.c is absent from this kernel source."
           fi
-
-          # Patch 02 must apply successfully.
-
+          echo "Checking patch 02..."
           patch --dry-run -p1 \
-
             < "/tmp/droidspaces-patches/02.fix_restore cgroup file prefix handling .patch"
-
+          echo "Applying patch 02..."
           patch -p1 \
-
             < "/tmp/droidspaces-patches/02.fix_restore cgroup file prefix handling .patch"
-
+          echo "Checking for whitespace errors..."
           git diff --check
-
+          echo "Patch summary:"
           git diff --stat
-
+          echo "Patch checksums:"
           sha256sum /tmp/droidspaces-patches/*.patch
       - name: Integrate BakaSU
         run: |
