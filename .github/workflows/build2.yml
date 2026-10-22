@@ -124,11 +124,26 @@ jobs:
       - name: Apply force-load modules patch
         run: |
           curl -fL \
-            "https://raw.githubusercontent.com/ravindu644/Android-Kernel-Tutorials/main/patches/010.Disable-CRC-Checks.patch" \
-            -o /tmp/010.Disable-CRC-Checks.patch
+            "https://raw.githubusercontent.com/robot360-upload/patches/refs/heads/main/CRC.patch.patch" \
+            -o /tmp/CRC.patch.patch
 
-          git apply --check /tmp/010.Disable-CRC-Checks.patch
-          git apply /tmp/010.Disable-CRC-Checks.patch
+          git apply --check /tmp/CRC.patch.patch
+          git apply /tmp/CRC.patch.patch
+      - name: Add force-load module configs
+        run: |
+          cat >> arch/arm64/configs/vendor/gta4l-common.config <<'EOF'
+
+          # Force Load Kernel Modules
+          CONFIG_MODULES=y
+          CONFIG_MODULE_FORCE_LOAD=y
+          CONFIG_MODULE_UNLOAD=y
+          CONFIG_MODULE_FORCE_UNLOAD=y
+          CONFIG_MODVERSIONS=y
+          CONFIG_MODULE_SRCVERSION_ALL=n
+          CONFIG_MODULE_SIG=n
+          CONFIG_MODULE_COMPRESS=n
+          CONFIG_TRIM_UNUSED_KSYMS=n
+          EOF
       - name: Download Neutron Clang
         run: |
           set -euo pipefail
