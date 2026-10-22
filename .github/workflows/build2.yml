@@ -121,6 +121,14 @@ jobs:
           EOF
           cat "$CONFIG"
 
+      - name: Apply force-load modules patch
+        run: |
+          curl -fL \
+            "https://raw.githubusercontent.com/ravindu644/Android-Kernel-Tutorials/main/patches/010.Disable-CRC-Checks.patch" \
+            -o /tmp/010.Disable-CRC-Checks.patch
+
+          git apply --check /tmp/010.Disable-CRC-Checks.patch
+          git apply /tmp/010.Disable-CRC-Checks.patch
       - name: Download Neutron Clang
         run: |
           set -euo pipefail
