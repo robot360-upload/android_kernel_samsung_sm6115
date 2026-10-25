@@ -35,14 +35,14 @@ jobs:
       - name: Apply BakaSU Linux 4.19 manual-hook patch
         run: |
           set -euxo pipefail
-          PATCH_URL="https://raw.githubusercontent.com/robot360-upload/patches/main/bakasu_hooks_corrected.patch"
-          curl -fL "$PATCH_URL" -o /tmp/bakasu_hooks_corrected.patch
+          PATCH_URL="https://raw.githubusercontent.com/robot360-upload/patches/refs/heads/main/bakasu-manual-hooks.patch"
+          curl -fL "$PATCH_URL" -o /tmp/bakasu-manual-hooks.patch
           # Do not modify the source if the patch cannot apply cleanly.
-          git apply --check /tmp/bakasu_hooks_corrected.patch
-          git apply /tmp/bakasu_hooks_corrected.patch
+          git apply --check /tmp/bakasu-manual-hooks.patch
+          git apply /tmp/bakasu-manual-hooks.patch
           git diff --check
           git diff --stat
-          sha256sum /tmp/bakasu_hooks_corrected.patch
+          sha256sum /tmp/bakasu-manual-hooks.patch
       - name: Integrate NoMount
         run: |
           set -euxo pipefail
@@ -68,10 +68,6 @@ jobs:
           # Kernel release string
           CONFIG_LOCALVERSION=""
           CONFIG_LOCALVERSION_AUTO=n
-          # BakaSU manual hooks
-          CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_HOOK=y
-          CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y
           # NoMount
           CONFIG_NOMOUNT=y
           EOF
