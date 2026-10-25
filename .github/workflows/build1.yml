@@ -32,17 +32,43 @@ jobs:
           git -C KernelSU rev-parse HEAD
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
           grep -q 'CONFIG_KSU' drivers/Makefile
-      - name: Apply BakaSU Linux 4.19 manual-hook patch
+      - name: Apply BakaSU Linux 4.19 manual-hook patches
         run: |
           set -euxo pipefail
-          PATCH_URL="https://raw.githubusercontent.com/robot360-upload/patches/main/bakasu_hooks_corrected.patch"
-          curl -fL "$PATCH_URL" -o /tmp/bakasu_hooks_corrected.patch
-          # Do not modify the source if the patch cannot apply cleanly.
-          git apply --check /tmp/bakasu_hooks_corrected.patch
-          git apply /tmp/bakasu_hooks_corrected.patch
+
+          PATCH_BASE="https://raw.githubusercontent.com/robot360-upload/patches/refs/heads/main"
+          PATCH_DIR="/tmp/bakasu_hooks_patches"
+          mkdir -p "$PATCH_DIR"
+
+          PATCHES=(
+            "01-ksu_config.patch"
+            "02-execve.patch"
+            "03-faccessat.patch"
+            "04-stat-hooks.patch"
+            "05-reboot-hook.patch"
+          )
+
+          # Download all five patches.
+          for patch in "${PATCHES[@]}"; do
+            curl -fL "$PATCH_BASE/$patch" -o "$PATCH_DIR/$patch"
+          done
+
+          # Check every patch before applying any of them.
+          for patch in "${PATCHES[@]}"; do
+            git apply --check "$PATCH_DIR/$patch"
+          done
+
+          # Apply patches in order.
+          for patch in "${PATCHES[@]}"; do
+            git apply "$PATCH_DIR/$patch"
+          done
+
+          # Verify changes.
           git diff --check
           git diff --stat
-          sha256sum /tmp/bakasu_hooks_corrected.patch
+
+          # Print patch checksums.
+          sha256sum "${PATCHES[@]/#/$PATCH_DIR/}"
       - name: Integrate NoMount
         run: |
           set -euxo pipefail
@@ -68,10 +94,6 @@ jobs:
           # Kernel release string
           CONFIG_LOCALVERSION=""
           CONFIG_LOCALVERSION_AUTO=n
-          # BakaSU manual hooks
-          CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_HOOK=y
-          CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y
           # NoMount
           CONFIG_NOMOUNT=y
           EOF
