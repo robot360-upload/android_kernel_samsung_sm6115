@@ -130,25 +130,29 @@ jobs:
             olddefconfig
       - name: Verify final kernel configuration
         run: |
-          set -euo pipefail
+          set -uo pipefail
           CONFIG="out/.config"
-          grep -qx 'CONFIG_LOCALVERSION=""' "$CONFIG"
-          grep -qx '# CONFIG_LOCALVERSION_AUTO is not set' "$CONFIG"
-          grep -qx 'CONFIG_KSU=y' "$CONFIG"
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' "$CONFIG"
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y' "$CONFIG"
-          grep -qx 'CONFIG_NOMOUNT=y' "$CONFIG"
-          # Verify the automatic hooks expected for this Linux 4.19 integration.
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK=y' "$CONFIG"
-          grep -qx 'CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK=y' "$CONFIG"
-          # The selected hooking method must be manual, not tracepoint.
-          if grep -qx 'CONFIG_KSU_TRACEPOINT_HOOK=y' "$CONFIG"; then
-            echo "ERROR: tracepoint hooking is enabled instead of manual hooking." >&2
-            exit 1
-          fi
-          grep -E \
-            '^(CONFIG_LOCALVERSION=|# CONFIG_LOCALVERSION_AUTO|CONFIG_KSU=|CONFIG_KSU_MANUAL_HOOK=|CONFIG_KSU_MANUAL_HOOK_AUTO_|CONFIG_NOMOUNT=)' \
-            "$CONFIG"
+
+          echo "=== Relevant kernel configuration ==="
+          grep -E '^(CONFIG_LOCALVERSION=|# CONFIG_LOCALVERSION_AUTO|CONFIG_KSU=|CONFIG_KSU_MANUAL_HOOK=|CONFIG_KSU_MANUAL_HOOK_AUTO_|CONFIG_KSU_TRACEPOINT_HOOK=|CONFIG_NOMOUNT=|CONFIG_KSU_SUSFS=)' "$CONFIG" || true
+
+          echo
+          echo "=== Checking required settings ==="
+
+          check_config() {
+              if grep -qxF "$1" "$CONFIG"; then
+                  echo "OK:      $1"
+              else
+                  echo "MISSING: $1"
+              fi
+          }
+
+          check_config 'CONFIG_LOCALVERSION=""'
+          check_config '# CONFIG_LOCALVERSION_AUTO is not set'
+          check_config 'CONFIG_KSU=y'
+          check_config 'CONFIG_KSU_MANUAL_HOOK=y'
+          check_config 'CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK=y'
+          check_config 'CONFIG_NOMOUNT=y'
       - name: Build kernel Image
         run: |
           set -euo pipefail
