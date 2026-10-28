@@ -12,13 +12,31 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            bc bison cpio clang curl flex git \
-            libelf-dev libncurses-dev libssl-dev lld llvm \
-            make python3 rsync
+            bc bison cpio curl flex git \
+            libelf-dev libncurses-dev libssl-dev \
+            lld llvm make python3 rsync zstd
+
+      - name: Install Neutron Clang
+        run: |
+          set -e
+          mkdir -p "$HOME/toolchains/neutron-clang"
+          cd "$HOME/toolchains/neutron-clang"
+
+          curl -fLo antman \
+            https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman
+          chmod +x antman
+
+          ./antman -S
+
+          test -x bin/clang
+          echo "$HOME/toolchains/neutron-clang/bin" >> "$GITHUB_PATH"
+
+          ./antman -I
+          bin/clang --version
 
       - name: Clone LineageOS kernel
         run: |
@@ -27,12 +45,12 @@ jobs:
             https://github.com/LineageOS/android_kernel_samsung_sm6115 \
             kernel
 
-      - name: Install KernelSU-Next (legacy mode)
+      - name: Install KernelSU-Next legacy mode
         working-directory: kernel
         run: |
           set -e
-          curl -LSs \
-            "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+          curl -fLSs \
+            https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
       - name: Enable KernelSU Kprobe configs
@@ -66,8 +84,8 @@ jobs:
         working-directory: kernel
         run: |
           set -e
-          curl -LSs \
-            "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
+          curl -fLSs \
+            https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh \
             | bash -
 
       - name: Configure kernel
@@ -78,6 +96,7 @@ jobs:
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
+          export CC=clang
           export HOSTCC=clang
           export HOSTCXX=clang++
 
@@ -90,7 +109,7 @@ jobs:
 
           make O=out olddefconfig
 
-      - name: Verify final configuration
+      - name: Verify configuration
         working-directory: kernel
         run: |
           set -e
@@ -107,10 +126,10 @@ jobs:
                 out/.config || true
               exit 1
             fi
-            echo "OK: ${option}=y"
+            echo "Verified: ${option}=y"
           done
 
-      - name: Build uncompressed Image with Clang
+      - name: Build uncompressed Image
         working-directory: kernel
         run: |
           set -e
@@ -118,20 +137,21 @@ jobs:
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
+          export CC=clang
           export HOSTCC=clang
           export HOSTCXX=clang++
 
+          clang --version
           make O=out -j"$(nproc)" Image
 
-          test -f out/arch/arm64/boot/Image
+          test -s out/arch/arm64/boot/Image
           file out/arch/arm64/boot/Image
           ls -lh out/arch/arm64/boot/Image
 
-      - name: Upload kernel Image and config
-        if: success()
+      - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: SM-T505-SM6115-Image
+          name: SM-T505-SM6115-Neutron-Image
           path: |
             kernel/out/arch/arm64/boot/Image
             kernel/out/.config
