@@ -54,6 +54,22 @@ jobs:
             https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
+      - name: Check KernelSU Kconfig options
+        working-directory: kernel
+        run: |
+          echo "=== KernelSU Kconfig declarations ==="
+          grep -R -n -E \
+            'config KSU_KPROBE_HOOKS|KSU_KPROBE_HOOKS' \
+            drivers/kernelsu drivers/Kconfig \
+            2>/dev/null || true
+
+          echo "=== KernelSU source directory ==="
+          ls -ld drivers/kernelsu || true
+
+          echo "=== Relevant final config ==="
+          grep -E \
+            'CONFIG_(KSU|KPROBE|MODULES|EXT4_FS)' \
+            out/.config 2>/dev/null || true
       - name: Add KernelSU configs
         working-directory: kernel
         shell: bash
