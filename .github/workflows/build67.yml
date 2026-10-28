@@ -54,33 +54,16 @@ jobs:
             https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
-      - name: Enable KernelSU Kprobe configs
+      - name: Create KernelSU config fragment
         working-directory: kernel
         run: |
-          set -e
-          CONFIG="arch/arm64/configs/vendor/gta4l-common.config"
-          test -f "$CONFIG"
-
-          for option in \
-            CONFIG_KPROBES \
-            CONFIG_KPROBE_EVENTS \
-            CONFIG_KSU_KPROBE_HOOKS \
-            CONFIG_KSU
-          do
-            sed -i \
-              "/^${option}=/d; /^# ${option} is not set$/d" \
-              "$CONFIG"
-          done
-
-          cat >> "$CONFIG" <<'EOF'
-
-          # KernelSU-Next legacy Kprobe configuration
+          cat > arch/arm64/configs/vendor/ksu.config <<'EOF'
+          CONFIG_MODULES=y
           CONFIG_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
           CONFIG_KSU_KPROBE_HOOKS=y
           CONFIG_KSU=y
           EOF
-
       - name: Install NoMount
         working-directory: kernel
         run: |
@@ -107,6 +90,7 @@ jobs:
             -m -O out \
             out/.config \
             arch/arm64/configs/vendor/gta4l-common.config
+            arch/arm64/configs/vendor/ksu.config
 
           make O=out olddefconfig
 
