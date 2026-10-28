@@ -35,9 +35,10 @@ jobs:
           test -x bin/clang
           echo "$HOME/toolchains/neutron-clang/bin" >> "$GITHUB_PATH"
 
+          ./antman --patch=glibc
           ./antman -I
           bin/clang --version
-
+          bin/ld.lld --version
       - name: Clone LineageOS kernel
         run: |
           git clone --depth=1 \
