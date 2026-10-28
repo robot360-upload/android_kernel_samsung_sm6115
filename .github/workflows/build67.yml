@@ -56,21 +56,21 @@ jobs:
 
       - name: Create KernelSU config fragment
         working-directory: kernel
+        shell: bash
         run: |
           set -e
-          CONFIG="arch/arm64/configs/vendor/ksu.config"
+          mkdir -p arch/arm64/configs/vendor
 
-          mkdir -p "$(dirname "$CONFIG")"
+          printf '%s\n' \
+            'CONFIG_MODULES=y' \
+            'CONFIG_KPROBES=y' \
+            'CONFIG_KPROBE_EVENTS=y' \
+            'CONFIG_KSU_KPROBE_HOOKS=y' \
+            'CONFIG_KSU=y' \
+            > arch/arm64/configs/vendor/ksu.config
 
-          cat > "$CONFIG" <<'EOF'
-          CONFIG_MODULES=y
-          CONFIG_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_KPROBE_HOOKS=y
-          CONFIG_KSU=y
-          EOF
-
-          cat "$CONFIG"
+          echo "Created config fragment:"
+          cat arch/arm64/configs/vendor/ksu.config
       - name: Install NoMount
         working-directory: kernel
         run: |
