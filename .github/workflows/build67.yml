@@ -81,6 +81,19 @@ jobs:
           else
             echo "No kernel_umount.o command file yet"
           fi
+      - name: Fix KernelSU umount compatibility for 4.19
+        working-directory: kernel
+        run: |
+          sed -i '/ccflags-y += -DKSU_HAS_PATH_UMOUNT/d' \
+            drivers/kernelsu/Kbuild
+
+          echo "=== Verify macro definition removed ==="
+          if grep -n 'KSU_HAS_PATH_UMOUNT' drivers/kernelsu/Kbuild; then
+            echo "ERROR: macro definition still exists"
+            exit 1
+          else
+            echo "OK: forced definition removed"
+          fi
       - name: Inspect KernelSU-Next Kconfig
         working-directory: kernel
         run: |
