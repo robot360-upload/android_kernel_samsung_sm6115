@@ -55,9 +55,12 @@ jobs:
             | bash -s legacy
 
       - name: Diagnose KernelSU path_umount
+        working-directory: kernel
         run: |
+          echo "=== Current directory ==="
+          pwd
           echo "=== Kernel version ==="
-          grep -n 'VERSION =\|PATCHLEVEL =\|SUBLEVEL =' Makefile
+          grep -nE '^(VERSION|PATCHLEVEL|SUBLEVEL) =' Makefile
 
           echo "=== KSU_HAS_PATH_UMOUNT definitions ==="
           git grep -n 'KSU_HAS_PATH_UMOUNT' || true
@@ -65,13 +68,13 @@ jobs:
             drivers/kernelsu include/linux Makefile \
             2>/dev/null || true
 
-          echo "=== path_umount definitions and references ==="
+          echo "=== path_umount references ==="
           git grep -n -w 'path_umount' || true
 
           echo "=== KernelSU umount implementation ==="
           sed -n '1,100p' drivers/kernelsu/feature/kernel_umount.c
 
-          echo "=== Compiler flags, if already generated ==="
+          echo "=== Compiler flags, if available ==="
           if [ -f drivers/kernelsu/feature/.kernel_umount.o.cmd ]; then
             grep -oE -- '-D[K]SU_HAS_PATH_UMOUNT(=[^ ]+)?' \
               drivers/kernelsu/feature/.kernel_umount.o.cmd || true
