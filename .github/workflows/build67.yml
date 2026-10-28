@@ -59,21 +59,22 @@ jobs:
         run: |
           set -e
 
-          echo "=== KernelSU-Next directory ==="
-          ls -la drivers/KernelSU-Next/kernel
+          KSU_DIR="drivers/kernelsu"
+
+          echo "=== KernelSU source path ==="
+          readlink -f "$KSU_DIR"
+          test -d "$KSU_DIR"
 
           echo "=== Kconfig files ==="
-          find drivers/KernelSU-Next/kernel \
-            -type f \( -name 'Kconfig' -o -name '*.Kconfig' \)
+          find -L "$KSU_DIR" -type f -name 'Kconfig'
 
-          echo "=== KSU-related configuration declarations ==="
+          echo "=== KSU and Kprobe declarations ==="
           grep -R -n -E \
             'config KSU|KPROBE|KPROBES|KSU_KPROBE' \
-            drivers/KernelSU-Next/kernel \
+            "$KSU_DIR" \
             --include='Kconfig' \
             --include='*.Kconfig' \
-            --include='Makefile' \
-            || true
+            --include='Makefile' || true
       - name: Add KernelSU configs
         working-directory: kernel
         shell: bash
