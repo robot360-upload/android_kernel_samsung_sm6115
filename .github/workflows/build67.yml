@@ -87,7 +87,9 @@ jobs:
           for option in \
             CONFIG_KPROBES \
             CONFIG_KPROBE_EVENTS \
+            CONFIG_KRETPROBES \
             CONFIG_KSU_KPROBE_HOOKS \
+            CONFIG_KSU_KPROBES_HOOK \
             CONFIG_KSU
           do
             sed -i \
@@ -97,14 +99,13 @@ jobs:
 
           cat >> "$CONFIG" <<'EOF'
 
-          # KernelSU-Next legacy configuration
+          # KernelSU-Next legacy Kprobe configuration
           CONFIG_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_KPROBE_HOOKS=y
+          CONFIG_KRETPROBES=y
+          CONFIG_KSU_KPROBES_HOOK=y
           CONFIG_KSU=y
           EOF
-
-          tail -n 10 "$CONFIG"
       - name: Install NoMount
         working-directory: kernel
         run: |
