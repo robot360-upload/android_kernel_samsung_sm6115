@@ -54,23 +54,36 @@ jobs:
             https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
-      - name: Create KernelSU config fragment
+      - name: Add KernelSU configs
         working-directory: kernel
         shell: bash
         run: |
           set -e
-          mkdir -p arch/arm64/configs/vendor
 
-          printf '%s\n' \
-            'CONFIG_MODULES=y' \
-            'CONFIG_KPROBES=y' \
-            'CONFIG_KPROBE_EVENTS=y' \
-            'CONFIG_KSU_KPROBE_HOOKS=y' \
-            'CONFIG_KSU=y' \
-            > arch/arm64/configs/vendor/ksu.config
+          CONFIG="arch/arm64/configs/vendor/gta4l-common.config"
+          test -f "$CONFIG"
 
-          echo "Created config fragment:"
-          cat arch/arm64/configs/vendor/ksu.config
+          for option in \
+            CONFIG_KPROBES \
+            CONFIG_KPROBE_EVENTS \
+            CONFIG_KSU_KPROBE_HOOKS \
+            CONFIG_KSU
+          do
+            sed -i \
+              "/^${option}=/d; /^# ${option} is not set$/d" \
+              "$CONFIG"
+          done
+
+          cat >> "$CONFIG" <<'EOF'
+
+          # KernelSU-Next legacy configuration
+          CONFIG_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU_KPROBE_HOOKS=y
+          CONFIG_KSU=y
+          EOF
+
+          tail -n 10 "$CONFIG"
       - name: Install NoMount
         working-directory: kernel
         run: |
@@ -97,7 +110,6 @@ jobs:
             -m -O out \
             out/.config \
             arch/arm64/configs/vendor/gta4l-common.config
-            arch/arm64/configs/vendor/ksu.config
 
           make O=out olddefconfig
 
