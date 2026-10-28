@@ -176,7 +176,32 @@ jobs:
             arch/arm64/configs/vendor/gta4l-common.config
 
           make O=out olddefconfig
-          
+
+      - name: Find WiFi and audio Kconfig symbols
+        working-directory: kernel
+        run: |
+          set -e
+
+          echo "=== WiFi driver ==="
+          grep -R -n -E 'qca_cld3_wlan\.o|qca_cld3_wlan-y' \
+            drivers --include='Makefile' --include='Kbuild' || true
+
+          echo "=== Audio driver build entries ==="
+          for module in \
+            audio_adsp_loader audio_apr audio_bolero_cdc \
+            audio_fs18xx audio_machine_bengal audio_mbhc \
+            audio_q6 audio_q6_notifier audio_swr audio_swr_ctrl \
+            audio_tx_macro audio_va_macro audio_wcd937x \
+            audio_wcd937x_slave audio_wcd9xxx audio_wcd_core \
+            audio_wsa881x_analog audio_rx_macro audio_platform \
+            audio_pinctrl_lpi audio_pm2250_spmi audio_usf \
+            audio_native audio_rouleur audio_rouleur_slave \
+            audio_snd_event
+          do
+            echo "--- $module ---"
+            grep -R -n -F "$module.o" drivers \
+              --include='Makefile' --include='Kbuild' 2>/dev/null || true
+          done
       - name: Diagnose KernelSU hook dependencies
         working-directory: kernel
         run: |
