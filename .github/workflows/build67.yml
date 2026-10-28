@@ -1,0 +1,139 @@
+name: Build SM6115 Kernel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison cpio clang curl flex git \
+            libelf-dev libncurses-dev libssl-dev lld llvm \
+            make python3 rsync
+
+      - name: Clone LineageOS kernel
+        run: |
+          git clone --depth=1 \
+            --branch lineage-24.0 \
+            https://github.com/LineageOS/android_kernel_samsung_sm6115 \
+            kernel
+
+      - name: Install KernelSU-Next (legacy mode)
+        working-directory: kernel
+        run: |
+          set -e
+          curl -LSs \
+            "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+            | bash -s legacy
+
+      - name: Enable KernelSU Kprobe configs
+        working-directory: kernel
+        run: |
+          set -e
+          CONFIG="arch/arm64/configs/vendor/gta4l-common.config"
+          test -f "$CONFIG"
+
+          for option in \
+            CONFIG_KPROBES \
+            CONFIG_KPROBE_EVENTS \
+            CONFIG_KSU_KPROBE_HOOKS \
+            CONFIG_KSU
+          do
+            sed -i \
+              "/^${option}=/d; /^# ${option} is not set$/d" \
+              "$CONFIG"
+          done
+
+          cat >> "$CONFIG" <<'EOF'
+
+          # KernelSU-Next legacy Kprobe configuration
+          CONFIG_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU_KPROBE_HOOKS=y
+          CONFIG_KSU=y
+          EOF
+
+      - name: Install NoMount
+        working-directory: kernel
+        run: |
+          set -e
+          curl -LSs \
+            "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" \
+            | bash -
+
+      - name: Configure kernel
+        working-directory: kernel
+        run: |
+          set -e
+
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export HOSTCC=clang
+          export HOSTCXX=clang++
+
+          make O=out vendor/bengal-perf_defconfig
+
+          scripts/kconfig/merge_config.sh \
+            -m -O out \
+            out/.config \
+            arch/arm64/configs/vendor/gta4l-common.config
+
+          make O=out olddefconfig
+
+      - name: Verify final configuration
+        working-directory: kernel
+        run: |
+          set -e
+
+          for option in \
+            CONFIG_KPROBES \
+            CONFIG_KPROBE_EVENTS \
+            CONFIG_KSU_KPROBE_HOOKS \
+            CONFIG_KSU
+          do
+            if ! grep -qx "${option}=y" out/.config; then
+              echo "ERROR: $option is not enabled"
+              grep -E "^(${option}=|# ${option} is not set)" \
+                out/.config || true
+              exit 1
+            fi
+            echo "OK: ${option}=y"
+          done
+
+      - name: Build uncompressed Image with Clang
+        working-directory: kernel
+        run: |
+          set -e
+
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export HOSTCC=clang
+          export HOSTCXX=clang++
+
+          make O=out -j"$(nproc)" Image
+
+          test -f out/arch/arm64/boot/Image
+          file out/arch/arm64/boot/Image
+          ls -lh out/arch/arm64/boot/Image
+
+      - name: Upload kernel Image and config
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SM-T505-SM6115-Image
+          path: |
+            kernel/out/arch/arm64/boot/Image
+            kernel/out/.config
+          if-no-files-found: error
+          retention-days: 7
