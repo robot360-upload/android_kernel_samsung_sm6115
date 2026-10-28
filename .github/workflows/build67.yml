@@ -54,19 +54,30 @@ jobs:
             https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
-      - name: Diagnose path_umount
-        working-directory: kernel
+      - name: Diagnose KernelSU path_umount
         run: |
-          echo "=== KernelSU reference ==="
-          sed -n '1,100p' drivers/kernelsu/feature/kernel_umount.c
+          echo "=== Kernel version ==="
+          grep -n 'VERSION =\|PATCHLEVEL =\|SUBLEVEL =' Makefile
 
-          echo "=== Kernel source definitions ==="
+          echo "=== KSU_HAS_PATH_UMOUNT definitions ==="
+          git grep -n 'KSU_HAS_PATH_UMOUNT' || true
+          grep -R -n 'KSU_HAS_PATH_UMOUNT' \
+            drivers/kernelsu include/linux Makefile \
+            2>/dev/null || true
+
+          echo "=== path_umount definitions and references ==="
           git grep -n -w 'path_umount' || true
 
-          echo "=== Related unmount functions ==="
-          git grep -n -E \
-            'path_umount|path_mount|path_lookupat|umount_tree' \
-            -- fs include drivers/kernelsu || true
+          echo "=== KernelSU umount implementation ==="
+          sed -n '1,100p' drivers/kernelsu/feature/kernel_umount.c
+
+          echo "=== Compiler flags, if already generated ==="
+          if [ -f drivers/kernelsu/feature/.kernel_umount.o.cmd ]; then
+            grep -oE -- '-D[K]SU_HAS_PATH_UMOUNT(=[^ ]+)?' \
+              drivers/kernelsu/feature/.kernel_umount.o.cmd || true
+          else
+            echo "No kernel_umount.o command file yet"
+          fi
       - name: Inspect KernelSU-Next Kconfig
         working-directory: kernel
         run: |
