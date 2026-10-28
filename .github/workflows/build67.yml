@@ -143,15 +143,17 @@ jobs:
           for option in \
             CONFIG_KPROBES \
             CONFIG_KPROBE_EVENTS \
-            CONFIG_KSU_KPROBE_HOOKS \
+            CONFIG_KRETPROBES \
+            CONFIG_KSU_KPROBES_HOOK \
             CONFIG_KSU
           do
             if ! grep -qx "${option}=y" out/.config; then
-              echo "ERROR: $option is not enabled"
+              echo "ERROR: ${option} is not enabled"
               grep -E "^(${option}=|# ${option} is not set)" \
                 out/.config || true
               exit 1
             fi
+
             echo "Verified: ${option}=y"
           done
 
