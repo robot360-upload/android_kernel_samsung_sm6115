@@ -134,7 +134,22 @@ jobs:
             arch/arm64/configs/vendor/gta4l-common.config
 
           make O=out olddefconfig
+          
+      - name: Diagnose KernelSU hook dependencies
+        working-directory: kernel
+        run: |
+          echo "=== Hook Kconfig ==="
+          sed -n '40,75p' drivers/kernelsu/Kconfig
 
+          echo "=== Resolved dependency symbols ==="
+          grep -E \
+            'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_KPROBES_HOOK|KPROBES|KRETPROBES|HAVE_SYSCALL_TRACEPOINTS|FTRACE|FUNCTION_TRACER)=' \
+            out/.config || true
+
+          echo "=== Tracepoint capability definitions ==="
+          grep -R -n 'config HAVE_SYSCALL_TRACEPOINTS' \
+            arch/arm64 arch/Kconfig kernel \
+            --include='Kconfig*' || true
       - name: Verify configuration
         working-directory: kernel
         run: |
