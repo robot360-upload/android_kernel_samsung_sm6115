@@ -54,6 +54,19 @@ jobs:
             https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
+      - name: Diagnose path_umount
+        working-directory: kernel
+        run: |
+          echo "=== KernelSU reference ==="
+          sed -n '1,100p' drivers/kernelsu/feature/kernel_umount.c
+
+          echo "=== Kernel source definitions ==="
+          git grep -n -w 'path_umount' || true
+
+          echo "=== Related unmount functions ==="
+          git grep -n -E \
+            'path_umount|path_mount|path_lookupat|umount_tree' \
+            -- fs include drivers/kernelsu || true
       - name: Inspect KernelSU-Next Kconfig
         working-directory: kernel
         run: |
