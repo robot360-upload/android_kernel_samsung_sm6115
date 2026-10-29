@@ -58,30 +58,31 @@ jobs:
           test -f drivers/kernelsu/Kconfig
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
 
-      - name: Replace five kernel source files
+      - name: Replace six kernel source files
         working-directory: kernel
         run: |
           set -euo pipefail
-
           BASE="https://raw.githubusercontent.com/robot360-upload/patches/main"
 
           curl -fL "$BASE/open.c" -o fs/open.c
           curl -fL "$BASE/stat.c" -o fs/stat.c
           curl -fL "$BASE/read_write.c" -o fs/read_write.c
           curl -fL "$BASE/exec.c" -o fs/exec.c
-          curl -fL "$BASE/namespace.c -o fs/namespace.c
+          curl -fL "$BASE/namespace.c" -o fs/namespace.c
           curl -fL "$BASE/reboot.c" -o kernel/reboot.c
 
           test -s fs/open.c
           test -s fs/stat.c
           test -s fs/read_write.c
           test -s fs/exec.c
+          test -s fs/namespace.c
           test -s kernel/reboot.c
 
           grep -q 'ksu_handle_faccessat' fs/open.c
           grep -q 'ksu_handle_stat' fs/stat.c
           grep -q 'ksu_handle_sys_read' fs/read_write.c
           grep -q 'ksu_handle_execveat' fs/exec.c
+          grep -q 'path_umount' fs/namespace.c
           grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
 
           git diff --check
