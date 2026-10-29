@@ -22,7 +22,7 @@ jobs:
 
       - name: Install Neutron Clang
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p "$HOME/toolchains/neutron-clang"
           cd "$HOME/toolchains/neutron-clang"
 
@@ -31,7 +31,6 @@ jobs:
           chmod +x antman
 
           ./antman -S
-
           test -x bin/clang
           echo "$HOME/toolchains/neutron-clang/bin" >> "$GITHUB_PATH"
 
@@ -39,127 +38,84 @@ jobs:
           ./antman -I
           bin/clang --version
           bin/ld.lld --version
+
       - name: Clone LineageOS kernel
         run: |
+          set -euo pipefail
           git clone --depth=1 \
             --branch lineage-24.0 \
             https://github.com/LineageOS/android_kernel_samsung_sm6115 \
             kernel
 
-      - name: Install KernelSU-Next legacy mode
+      - name: Install KernelSU-Next
         working-directory: kernel
         run: |
-          set -e
+          set -euo pipefail
           curl -fLSs \
             https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh \
             | bash -s legacy
 
-      - name: Diagnose KernelSU path_umount
+          test -f drivers/kernelsu/Kconfig
+          grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
+
+      - name: Replace five kernel source files
         working-directory: kernel
         run: |
-          echo "=== Current directory ==="
-          pwd
-          echo "=== Kernel version ==="
-          grep -nE '^(VERSION|PATCHLEVEL|SUBLEVEL) =' Makefile
+          set -euo pipefail
 
-          echo "=== KSU_HAS_PATH_UMOUNT definitions ==="
-          git grep -n 'KSU_HAS_PATH_UMOUNT' || true
-          grep -R -n 'KSU_HAS_PATH_UMOUNT' \
-            drivers/kernelsu include/linux Makefile \
-            2>/dev/null || true
+          BASE="https://raw.githubusercontent.com/robot360-upload/patches/main"
 
-          echo "=== path_umount references ==="
-          git grep -n -w 'path_umount' || true
+          curl -fL "$BASE/open.c" -o fs/open.c
+          curl -fL "$BASE/stat.c" -o fs/stat.c
+          curl -fL "$BASE/read_write.c" -o fs/read_write.c
+          curl -fL "$BASE/exec.c" -o fs/exec.c
+          curl -fL "$BASE/reboot.c" -o kernel/reboot.c
 
-          echo "=== KernelSU umount implementation ==="
-          sed -n '1,100p' drivers/kernelsu/feature/kernel_umount.c
+          test -s fs/open.c
+          test -s fs/stat.c
+          test -s fs/read_write.c
+          test -s fs/exec.c
+          test -s kernel/reboot.c
 
-          echo "=== Compiler flags, if available ==="
-          if [ -f drivers/kernelsu/feature/.kernel_umount.o.cmd ]; then
-            grep -oE -- '-D[K]SU_HAS_PATH_UMOUNT(=[^ ]+)?' \
-              drivers/kernelsu/feature/.kernel_umount.o.cmd || true
-          else
-            echo "No kernel_umount.o command file yet"
-          fi
-      - name: Fix KernelSU umount compatibility for 4.19
-        working-directory: kernel
-        run: |
-          sed -i '/ccflags-y += -DKSU_HAS_PATH_UMOUNT/d' \
-            drivers/kernelsu/Kbuild
+          grep -q 'ksu_handle_faccessat' fs/open.c
+          grep -q 'ksu_handle_stat' fs/stat.c
+          grep -q 'ksu_handle_sys_read' fs/read_write.c
+          grep -q 'ksu_handle_execveat' fs/exec.c
+          grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
 
-          echo "=== Verify macro definition removed ==="
-          if grep -n 'KSU_HAS_PATH_UMOUNT' drivers/kernelsu/Kbuild; then
-            echo "ERROR: macro definition still exists"
-            exit 1
-          else
-            echo "OK: forced definition removed"
-          fi
-      - name: Inspect KernelSU-Next Kconfig
-        working-directory: kernel
-        run: |
-          set -e
+          git diff --check
 
-          KSU_DIR="drivers/kernelsu"
-
-          echo "=== KernelSU source path ==="
-          readlink -f "$KSU_DIR"
-          test -d "$KSU_DIR"
-
-          echo "=== Kconfig files ==="
-          find -L "$KSU_DIR" -type f -name 'Kconfig'
-
-          echo "=== KSU and Kprobe declarations ==="
-          grep -R -n -E \
-            'config KSU|KPROBE|KPROBES|KSU_KPROBE' \
-            "$KSU_DIR" \
-            --include='Kconfig' \
-            --include='*.Kconfig' \
-            --include='Makefile' || true
-      - name: Add KernelSU configs
+      - name: Add only CONFIG_KSU
         working-directory: kernel
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           CONFIG="arch/arm64/configs/vendor/gta4l-common.config"
           test -f "$CONFIG"
 
           for option in \
+            CONFIG_KSU \
+            CONFIG_KSU_MANUAL_HOOK \
+            CONFIG_KSU_KPROBE_HOOK \
+            CONFIG_KSU_KPROBES_HOOK \
             CONFIG_KPROBES \
             CONFIG_KPROBE_EVENTS \
             CONFIG_KRETPROBES \
-            CONFIG_KSU_KPROBES_HOOK \
-            CONFIG_KSU_KPROBE_HOOKS \
-            CONFIG_KSU_MANUAL_HOOK \
-            CONFIG_KSU
+            CONFIG_NOMOUNT
           do
             sed -i \
               "/^${option}=/d; /^# ${option} is not set$/d" \
               "$CONFIG"
           done
 
-          cat >> "$CONFIG" <<'EOF'
-
-          # KernelSU-Next dynamic Kprobe hook configuration
-          CONFIG_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KRETPROBES=y
-          CONFIG_KSU=y
-          # CONFIG_KSU_MANUAL_HOOK is not set
-          CONFIG_KSU_KPROBES_HOOK=y
-          EOF
-      - name: Install NoMount
-        working-directory: kernel
-        run: |
-          set -e
-          curl -fLSs \
-            https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh \
-            | bash -
+          printf '\nCONFIG_KSU=y\n' >> "$CONFIG"
+          tail -n 20 "$CONFIG"
 
       - name: Configure kernel
         working-directory: kernel
         run: |
-          set -e
+          set -euo pipefail
 
           export ARCH=arm64
           export LLVM=1
@@ -177,59 +133,26 @@ jobs:
 
           make O=out olddefconfig
 
-      - name: Locate WiFi and audio build rules
+      - name: Verify configuration and hooks
         working-directory: kernel
         run: |
-          echo "=== WiFi build rules ==="
-          grep -R -n -E 'qca_cld3_wlan|QCA_CLD_WLAN' . \
-            --include='Makefile' --include='Kbuild' \
-            --exclude-dir=.git --exclude-dir=out || true
+          set -euo pipefail
 
-          echo "=== Audio build rules ==="
-          grep -R -n -E 'audio_(adsp_loader|apr|bolero_cdc|fs18xx|machine_bengal|mbhc|native|pinctrl_lpi|platform|pm2250_spmi|q6|q6_notifier|rouleur|rouleur_slave|snd_event|swr|swr_ctrl|tx_macro|usf|va_macro|wcd937x|wcd937x_slave|wcd9xxx|wcd_core|wsa881x_analog|rx_macro)' . \
-            --include='Makefile' --include='Kbuild' \
-            --exclude-dir=.git --exclude-dir=out || true
-      - name: Diagnose KernelSU hook dependencies
-        working-directory: kernel
-        run: |
-          echo "=== Hook Kconfig ==="
-          sed -n '40,75p' drivers/kernelsu/Kconfig
+          grep -qx 'CONFIG_KSU=y' out/.config
 
-          echo "=== Resolved dependency symbols ==="
-          grep -E \
-            'CONFIG_(KSU|KSU_MANUAL_HOOK|KSU_KPROBES_HOOK|KPROBES|KRETPROBES|HAVE_SYSCALL_TRACEPOINTS|FTRACE|FUNCTION_TRACER)=' \
-            out/.config || true
+          grep -q 'ksu_handle_faccessat' fs/open.c
+          grep -q 'ksu_handle_stat' fs/stat.c
+          grep -q 'ksu_handle_sys_read' fs/read_write.c
+          grep -q 'ksu_handle_execveat' fs/exec.c
+          grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
 
-          echo "=== Tracepoint capability definitions ==="
-          grep -R -n 'config HAVE_SYSCALL_TRACEPOINTS' \
-            arch/arm64 arch/Kconfig kernel \
-            --include='Kconfig*' || true
-      - name: Verify configuration
-        working-directory: kernel
-        run: |
-          set -e
-
-          for option in \
-            CONFIG_KPROBES \
-            CONFIG_KPROBE_EVENTS \
-            CONFIG_KRETPROBES \
-            CONFIG_KSU_KPROBES_HOOK \
-            CONFIG_KSU
-          do
-            if ! grep -qx "${option}=y" out/.config; then
-              echo "ERROR: ${option} is not enabled"
-              grep -E "^(${option}=|# ${option} is not set)" \
-                out/.config || true
-              exit 1
-            fi
-
-            echo "Verified: ${option}=y"
-          done
+          echo "Verified CONFIG_KSU=y"
+          echo "Verified all five replacement source files"
 
       - name: Build uncompressed Image
         working-directory: kernel
         run: |
-          set -e
+          set -euo pipefail
 
           export ARCH=arm64
           export LLVM=1
@@ -244,17 +167,11 @@ jobs:
           test -s out/arch/arm64/boot/Image
           file out/arch/arm64/boot/Image
           ls -lh out/arch/arm64/boot/Image
-     
-      - name: Upload Module.symvers
-        uses: actions/upload-artifact@v4
-        with:
-          name: Module-symvers
-          path: kernel/out/Module.symvers
-          if-no-files-found: error
+
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: SM-T505-SM6115-Neutron-Image
+          name: SM-T505-SM6115-KernelSU-Image
           path: |
             kernel/out/arch/arm64/boot/Image
             kernel/out/.config
