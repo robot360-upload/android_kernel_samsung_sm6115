@@ -135,6 +135,12 @@ jobs:
 
           make O=out olddefconfig
 
+      - name: Upload kernel .config
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-config
+          path: kernel/out/.config
+          if-no-files-found: error
       - name: Verify configuration and hooks
         working-directory: kernel
         run: |
