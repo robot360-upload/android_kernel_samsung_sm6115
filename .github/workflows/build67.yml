@@ -157,6 +157,7 @@ jobs:
         with:
           name: kernel-config
           path: kernel/out/.config
+          include-hidden-files: true
           if-no-files-found: error
       - name: Verify configuration and hooks
         working-directory: kernel
