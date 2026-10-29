@@ -166,6 +166,12 @@ jobs:
             LLVM_IAS=1 \
             -j2 \
             Image
+      - name: Upload Module.symvers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Module-symvers
+          path: kernel/out/Module.symvers
+          if-no-files-found: error
       - name: Verify kernel image
         run: |
           set -euo pipefail
