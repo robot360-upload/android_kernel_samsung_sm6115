@@ -244,7 +244,13 @@ jobs:
           test -s out/arch/arm64/boot/Image
           file out/arch/arm64/boot/Image
           ls -lh out/arch/arm64/boot/Image
-
+     
+      - name: Upload Module.symvers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Module-symvers
+          path: kernel/out/Module.symvers
+          if-no-files-found: error
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
