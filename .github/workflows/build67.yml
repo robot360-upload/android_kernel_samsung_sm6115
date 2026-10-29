@@ -69,6 +69,7 @@ jobs:
           curl -fL "$BASE/stat.c" -o fs/stat.c
           curl -fL "$BASE/read_write.c" -o fs/read_write.c
           curl -fL "$BASE/exec.c" -o fs/exec.c
+          curl -fL "$BASE/namespace.c -o fs/namespace.c
           curl -fL "$BASE/reboot.c" -o kernel/reboot.c
 
           test -s fs/open.c
