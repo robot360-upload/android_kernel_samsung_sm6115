@@ -141,6 +141,17 @@ jobs:
           pwd
           echo "Config files:"
           find . -type f -path '*/out/.config' -print
+      - name: Verify and upload kernel .config
+        run: |
+          set -euo pipefail
+          CONFIG="kernel/out/.config"
+
+          if [ ! -s "$CONFIG" ]; then
+            echo "::error::Kernel config missing or empty: $CONFIG"
+            exit 1
+          fi
+
+          ls -lh "$CONFIG"
       - name: Upload kernel .config
         uses: actions/upload-artifact@v4
         with:
