@@ -57,7 +57,14 @@ jobs:
 
           test -f drivers/kernelsu/Kconfig
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
-
+      - name: Search KernelSU Kprobe config symbol
+        working-directory: kernel
+        shell: bash
+        run: |
+          echo "=== Search entire kernel source ==="
+          grep -R -n "KSU_KPROBE_HOOKS" . \
+            --exclude-dir=out \
+            --exclude-dir=.git || true
       - name: Replace namespace.c
         working-directory: kernel
         run: |
