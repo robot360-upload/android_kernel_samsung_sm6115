@@ -82,24 +82,15 @@ jobs:
         working-directory: kernel
         shell: bash
         run: |
-          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request
 
-          CONFIG="arch/arm64/configs/vendor/gta4l-common.config"
-          test -f "$CONFIG"
+          url = "https://raw.githubusercontent.com/robot360-upload/patches/main/enable_kprobes.py"
 
-          sed -i -E '/^(CONFIG_(KPROBES|KRETPROBES|KPROBE_EVENTS|KSU|KSU_KPROBES_HOOK)=|# CONFIG_(KPROBES|KRETPROBES|KPROBE_EVENTS|KSU|KSU_KPROBES_HOOK) is not set)/d' "$CONFIG"
+          urllib.request.urlretrieve(url, "/tmp/enable_kprobes.py")
+          PY
 
-          cat >> "$CONFIG" <<'EOF'
-
-          CONFIG_KPROBES=y
-          CONFIG_KRETPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU=y
-          CONFIG_KSU_KPROBES_HOOK=y
-          EOF
-
-          echo "=== Updated configuration ==="
-          tail -n 12 "$CONFIG"
+          python3 /tmp/enable_kprobes.py
 
       - name: Configure kernel
         working-directory: kernel
