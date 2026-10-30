@@ -88,10 +88,11 @@ jobs:
           test -f "$CONFIG"
 
           for option in \
-            CONFIG_KPROBES \
-            CONFIG_KPROBE_EVENTS \
-            CONFIG_KSU_KPROBE_HOOKS \
-            CONFIG_KSU
+            CONFIG_KPROBES=y
+            CONFIG_KRETPROBES=y
+            CONFIG_KPROBE_EVENTS=y
+            CONFIG_KSU=y
+            CONFIG_KSU_KPROBES_HOOK=y
           do
             sed -i \
               "/^${option}=/d; /^# ${option} is not set$/d" \
@@ -101,9 +102,10 @@ jobs:
           cat >> "$CONFIG" <<'EOF'
 
           CONFIG_KPROBES=y
+          CONFIG_KRETPROBES=y
           CONFIG_KPROBE_EVENTS=y
-          CONFIG_KSU_KPROBE_HOOKS=y
           CONFIG_KSU=y
+          CONFIG_KSU_KPROBES_HOOK=y
           EOF
 
           tail -n 12 "$CONFIG"
@@ -165,10 +167,11 @@ jobs:
           CONFIG="out/.config"
 
           for option in \
-            CONFIG_KPROBES \
-            CONFIG_KPROBE_EVENTS \
-            CONFIG_KSU_KPROBE_HOOKS \
-            CONFIG_KSU
+            CONFIG_KPROBES=y
+            CONFIG_KRETPROBES=y
+            CONFIG_KPROBE_EVENTS=y
+            CONFIG_KSU=y
+            CONFIG_KSU_KPROBES_HOOK=y
           do
             if ! grep -qx "${option}=y" "$CONFIG"; then
               echo "::error::${option} is not enabled"
