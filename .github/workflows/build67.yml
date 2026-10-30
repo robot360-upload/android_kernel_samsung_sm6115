@@ -122,12 +122,15 @@ jobs:
 
           make O=out olddefconfig
 
-      - name: Find kernel config
+      - name: Diagnose KernelSU Kprobes config
+        working-directory: kernel
+        shell: bash
         run: |
-          echo "Current directory:"
-          pwd
-          echo "Config files:"
-          find . -type f -path '*/out/.config' -print
+          echo "=== Kprobes config ==="
+          grep -E '^(CONFIG_KPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_KPROBE_HOOKS)=|^# CONFIG_(KPROBES|KPROBE_EVENTS|KSU|KSU_KPROBE_HOOKS) is not set' out/.config || true
+
+          echo "=== KernelSU Kconfig declarations ==="
+          grep -R -n 'KSU_KPROBE_HOOKS' drivers/kernelsu 2>/dev/null || true
       - name: Verify and upload kernel .config
         run: |
           set -euo pipefail
