@@ -148,19 +148,29 @@ jobs:
           if-no-files-found: error
       - name: Verify configuration and hooks
         working-directory: kernel
+        shell: bash
         run: |
           set -euo pipefail
 
-          grep -qx 'CONFIG_KSU=y' out/.config
+          CONFIG="out/.config"
 
-          grep -q 'ksu_handle_faccessat' fs/open.c
-          grep -q 'ksu_handle_stat' fs/stat.c
-          grep -q 'ksu_handle_sys_read' fs/read_write.c
-          grep -q 'ksu_handle_execveat' fs/exec.c
-          grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
+          for option in \
+            CONFIG_KPROBES \
+            CONFIG_KPROBE_EVENTS \
+            CONFIG_KSU_KPROBE_HOOKS \
+            CONFIG_KSU
+          do
+            if ! grep -qx "${option}=y" "$CONFIG"; then
+              echo "::error::${option} is not enabled"
+              grep -E "^(${option}=|# ${option} is not set)" "$CONFIG" || true
+              exit 1
+            fi
+          done
 
-          echo "Verified CONFIG_KSU=y"
-          echo "Verified all five replacement source files"
+          grep -q 'path_umount' fs/namespace.c
+
+          echo "All four required config options are enabled."
+          echo "namespace.c path_umount backport is present."
 
       - name: Build uncompressed Image
         working-directory: kernel
