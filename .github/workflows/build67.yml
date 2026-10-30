@@ -57,6 +57,14 @@ jobs:
 
           test -f drivers/kernelsu/Kconfig
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
+      - name: Inspect KernelSU Kconfig
+        working-directory: kernel
+        run: |
+          echo "=== KernelSU Kconfig ==="
+          grep -n -A50 -B5 'KSU_KPROBES_HOOK' drivers/kernelsu/Kconfig || true
+
+          echo "=== Available KSU hook symbols ==="
+          grep -nE 'config KSU_.*HOOK|config KSU_KPROBE' drivers/kernelsu/Kconfig || true
       - name: Search KernelSU Kprobe config symbol
         working-directory: kernel
         shell: bash
