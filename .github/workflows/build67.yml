@@ -83,31 +83,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           CONFIG="arch/arm64/configs/vendor/gta4l-common.config"
           test -f "$CONFIG"
-
           for option in \
-            CONFIG_KPROBES=y
-            CONFIG_KRETPROBES=y
-            CONFIG_KPROBE_EVENTS=y
-            CONFIG_KSU=y
+            CONFIG_KPROBES=y \
+            CONFIG_KRETPROBES=y \
+            CONFIG_KPROBE_EVENTS=y \
+            CONFIG_KSU=y \
             CONFIG_KSU_KPROBES_HOOK=y
           do
             sed -i \
-              "/^${option}=/d; /^# ${option} is not set$/d" \
+              "/^${option%%=*}=.*/d; /^# ${option%%=*} is not set$/d" \
               "$CONFIG"
           done
-
           cat >> "$CONFIG" <<'EOF'
-
           CONFIG_KPROBES=y
           CONFIG_KRETPROBES=y
           CONFIG_KPROBE_EVENTS=y
           CONFIG_KSU=y
           CONFIG_KSU_KPROBES_HOOK=y
           EOF
-
           tail -n 12 "$CONFIG"
 
       - name: Configure kernel
