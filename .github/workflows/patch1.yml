@@ -1,0 +1,48 @@
+name: Apply BakaSU Manual Hooks
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply-hooks:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: lineage-24.0
+          fetch-depth: 0
+      - name: Checkout Custom-Kernel-Builder
+        uses: actions/checkout@v4
+        with:
+          repository: robot360-upload/Custom-Kernel-Builder
+          path: Custom-Kernel-Builder
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Apply BakaSU manual hooks
+        run: |
+          PATCH="Custom-Kernel-Builder/bakasu-manual-hooks.patch"
+          if [ ! -f "$PATCH" ]; then
+            echo "[!] Patch file not found!"
+            exit 1
+          fi
+          if git apply --check "$PATCH"; then
+            echo "[+] Patch can be applied."
+            git apply "$PATCH"
+          elif git apply --reverse --check "$PATCH"; then
+            echo "[!] Patch is already applied. Skipping."
+          else
+            echo "[!] Patch cannot be applied cleanly."
+            exit 1
+          fi
+      - name: Commit and push changes
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "[+] No changes to commit."
+            exit 0
+          fi
+          git commit -m "Integrate BakaSU manual hooks"
+          git push origin HEAD:lineage-24.0
