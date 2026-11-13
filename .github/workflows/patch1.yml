@@ -4,51 +4,46 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apply-hooks:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: lineage-24.0
+          fetch-depth: 0
+
       - name: Download BakaSU patch
         run: |
           curl -fL \
             "https://raw.githubusercontent.com/robot360-upload/Custom-Kernel-Builder/main/bakasu-manual-hooks.patch" \
             -o "$RUNNER_TEMP/bakasu-manual-hooks.patch"
 
-      - name: Checkout kernel source
-        uses: actions/checkout@v4
-        with:
-          repository: robot360-upload/android_kernel_samsung_sm6115
-          ref: lineage-24.0
-          token: ${{ secrets.KERNEL_REPO_TOKEN }}
-          path: kernel
-          fetch-depth: 0
-
       - name: Configure Git
-        working-directory: kernel
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Apply BakaSU manual hooks
-        working-directory: kernel
+      - name: Apply BakaSU hooks
         run: |
           PATCH="$RUNNER_TEMP/bakasu-manual-hooks.patch"
 
           if git apply --check "$PATCH"; then
-            echo "[+] Patch applies cleanly."
             git apply "$PATCH"
+            echo "[+] Patch applied successfully."
           elif git apply --reverse --check "$PATCH"; then
-            echo "[!] Patch is already applied."
+            echo "[!] Patch already applied."
+            exit 0
           else
-            echo "[!] Patch cannot be applied."
+            echo "[!] Patch cannot be applied cleanly."
             exit 1
           fi
 
-      - name: Commit and push changes
-        working-directory: kernel
+      - name: Commit and push
         run: |
           git add -u
 
@@ -58,5 +53,4 @@ jobs:
           fi
 
           git commit -m "Integrate BakaSU manual hooks"
-
           git push origin HEAD:lineage-24.0
