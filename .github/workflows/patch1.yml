@@ -1,48 +1,62 @@
 name: Apply BakaSU Manual Hooks
+
 on:
   workflow_dispatch:
+
 permissions:
-  contents: write
+  contents: read
+
 jobs:
   apply-hooks:
     runs-on: ubuntu-22.04
+
     steps:
+      - name: Download BakaSU patch
+        run: |
+          curl -fL \
+            "https://raw.githubusercontent.com/robot360-upload/Custom-Kernel-Builder/main/bakasu-manual-hooks.patch" \
+            -o "$RUNNER_TEMP/bakasu-manual-hooks.patch"
+
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
+          repository: robot360-upload/android_kernel_samsung_sm6115
           ref: lineage-24.0
+          token: ${{ secrets.KERNEL_REPO_TOKEN }}
+          path: kernel
           fetch-depth: 0
-      - name: Checkout Custom-Kernel-Builder
-        uses: actions/checkout@v4
-        with:
-          repository: robot360-upload/Custom-Kernel-Builder
-          path: Custom-Kernel-Builder
+
       - name: Configure Git
+        working-directory: kernel
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Apply BakaSU manual hooks
+        working-directory: kernel
         run: |
-          PATCH="Custom-Kernel-Builder/bakasu-manual-hooks.patch"
-          if [ ! -f "$PATCH" ]; then
-            echo "[!] Patch file not found!"
-            exit 1
-          fi
+          PATCH="$RUNNER_TEMP/bakasu-manual-hooks.patch"
+
           if git apply --check "$PATCH"; then
-            echo "[+] Patch can be applied."
+            echo "[+] Patch applies cleanly."
             git apply "$PATCH"
           elif git apply --reverse --check "$PATCH"; then
-            echo "[!] Patch is already applied. Skipping."
+            echo "[!] Patch is already applied."
           else
-            echo "[!] Patch cannot be applied cleanly."
+            echo "[!] Patch cannot be applied."
             exit 1
           fi
+
       - name: Commit and push changes
+        working-directory: kernel
         run: |
-          git add -A
+          git add -u
+
           if git diff --cached --quiet; then
             echo "[+] No changes to commit."
             exit 0
           fi
+
           git commit -m "Integrate BakaSU manual hooks"
+
           git push origin HEAD:lineage-24.0
