@@ -732,12 +732,7 @@ out:
 
 static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 {
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-	if (vma->vm_file) {
-		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
-			return 0;
-	}
-#endif
+
 	/*
 	 * Don't forget to update Documentation/ on changes.
 	 */
@@ -798,6 +793,13 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 #endif /* CONFIG_HAVE_ARCH_USERFAULTFD_MINOR */
 	};
 	size_t i;
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+        if (vma->vm_file) {
+                if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+                        return;
+        }
+#endif
 
 	seq_puts(m, "VmFlags: ");
 	for (i = 0; i < BITS_PER_LONG; i++) {
