@@ -62,6 +62,17 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+
+extern int ksu_handle_execveat_sucompat(int *fd,
+                                        struct filename **filename_ptr,
+                                        void *argv, void *envp, int *flags);
+extern int ksu_handle_post_execveat_sucompat(int *fd,
+					     struct filename **filename_ptr,
+					     void *argv, void *envp,
+					     int *flags, int *retval);
+#endif
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1737,9 +1748,21 @@ static int __do_execve_file(int fd, struct filename *filename,
 	struct linux_binprm *bprm;
 	struct files_struct *displaced;
 	int retval;
+#ifdef CONFIG_KSU_SUSFS
+	bool is_su_session = false;
+#endif
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
+#ifdef CONFIG_KSU_SUSFS
+	if (likely(susfs_is_current_proc_no_su()))
+		goto orig_flow;
+
+	is_su_session = !ksu_handle_execveat_sucompat(
+		&fd, &filename, &argv, &envp, &flags);
+
+orig_flow:
+#endif
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -1856,6 +1879,11 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;
+#ifdef CONFIG_KSU_SUSFS
+        if (unlikely(is_su_session))
+                (void)ksu_handle_post_execveat_sucompat(
+                        &fd, &filename, &argv, &envp, &flags, &retval);
+#endif
 
 	/* execve succeeded */
 	current->fs->in_exec = 0;
