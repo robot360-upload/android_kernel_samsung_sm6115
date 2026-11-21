@@ -17,6 +17,7 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/compat.h>
+#include "internal.h"
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
