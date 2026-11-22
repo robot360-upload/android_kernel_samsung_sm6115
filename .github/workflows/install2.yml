@@ -1,0 +1,47 @@
+name: Setup NoMount Submodule
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run NoMount setup script
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" | bash
+
+      - name: Register NoMount as submodule
+        run: |
+          if git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | grep -Eq '[[:space:]]NoMount$'; then
+            echo "[+] NoMount is already registered as a submodule."
+          else
+            echo "[+] Registering NoMount as a submodule..."
+            git submodule add -f -b dev https://github.com/maxsteeel/nomount.git NoMount
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "[+] No changes to commit."
+          else
+            git commit -m "Integrate NoMount as a submodule"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
