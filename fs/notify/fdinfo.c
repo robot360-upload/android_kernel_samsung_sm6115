@@ -13,6 +13,9 @@
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/exportfs.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
 
 #include "inotify/inotify.h"
 #include "fsnotify.h"
@@ -20,6 +23,10 @@
 #if defined(CONFIG_PROC_FS)
 
 #if defined(CONFIG_INOTIFY_USER) || defined(CONFIG_FANOTIFY)
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_sus_kstat_spoof_inotify_fdinfo(unsigned long *out_target_ino, dev_t *out_target_dev);
+#endif
 
 static void show_fdinfo(struct seq_file *m, struct file *f,
 			void (*show)(struct seq_file *m,
@@ -83,6 +90,25 @@ static void inotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)
 	inode_mark = container_of(mark, struct inotify_inode_mark, fsn_mark);
 	inode = igrab(fsnotify_conn_inode(mark->connector));
 	if (inode) {
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+		if (susfs_is_current_app_uid()) {
+			bool is_fuse = false;
+
+			if (susfs_is_inode_sus_kstat(inode, &is_fuse)) {
+				unsigned long ino = inode->i_ino;
+				dev_t dev = inode->i_sb->s_dev;
+
+				susfs_sus_kstat_spoof_inotify_fdinfo(&ino, &dev);
+				seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:0 ",
+					   inode_mark->wd, ino, dev,
+					   inotify_mark_user_mask(mark));
+				show_mark_fhandle(m, inode);
+				seq_putc(m, '\n');
+				iput(inode);
+				return;
+			}
+		}
+#endif
 		seq_printf(m, "inotify wd:%x ino:%lx sdev:%x mask:%x ignored_mask:0 ",
 			   inode_mark->wd, inode->i_ino, inode->i_sb->s_dev,
 			   inotify_mark_user_mask(mark));
